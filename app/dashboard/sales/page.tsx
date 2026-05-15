@@ -54,6 +54,7 @@ interface SaleRow {
   id: string
   clinic_id: string
   folio: string
+  public_invoice_token: string
   patient_name: string
   patient_phone: string | null
   patient_email: string | null
@@ -123,13 +124,13 @@ export default function SalesPage() {
     sale.folio.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const getSaleLink = (folio: string) => {
+  const getSaleLink = (token: string) => {
     if (!clinicSlug) return ''
-    return `${window.location.origin}/factura/${clinicSlug}/${folio}`
+    return `${window.location.origin}/factura/${clinicSlug}/v/${token}`
   }
 
-  const handleCopyLink = (folio: string) => {
-    const link = getSaleLink(folio)
+  const handleCopyLink = (sale: SaleRow) => {
+    const link = getSaleLink(sale.public_invoice_token)
     if (!link) {
       toast.error('No se pudo generar el link')
       return
@@ -139,7 +140,7 @@ export default function SalesPage() {
   }
 
   const handleWhatsApp = (sale: SaleRow) => {
-    const link = getSaleLink(sale.folio)
+    const link = getSaleLink(sale.public_invoice_token)
     if (!link) {
       toast.error('No se pudo generar el link')
       return
@@ -338,7 +339,7 @@ export default function SalesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="rounded-full" title="Link de factura" onClick={() => handleCopyLink(sale.folio)}>
+                        <Button variant="ghost" size="icon" className="rounded-full" title="Link de factura" onClick={() => handleCopyLink(sale)}>
                           <Copy className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" className="rounded-full text-emerald-600" title="Enviar WhatsApp" onClick={() => handleWhatsApp(sale)}>
@@ -355,7 +356,7 @@ export default function SalesPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="rounded-2xl">
                             <DropdownMenuLabel>Opciones</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleCopyLink(sale.folio)}>Copiar link</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopyLink(sale)}>Copiar link</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleWhatsApp(sale)}>Enviar WhatsApp</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -381,7 +382,7 @@ export default function SalesPage() {
             <div className="p-4 bg-white rounded-3xl shadow-2xl border border-primary/10">
               {selectedSale && (
                 <QRCodeSVG
-                  value={getSaleLink(selectedSale.folio)}
+                  value={getSaleLink(selectedSale.public_invoice_token)}
                   size={200}
                   level="H"
                   includeMargin={true}
@@ -394,7 +395,7 @@ export default function SalesPage() {
               <p className="text-xl font-bold text-primary">${selectedSale ? Number(selectedSale.amount).toLocaleString() : 0}</p>
             </div>
             <div className="grid grid-cols-2 gap-3 w-full">
-              <Button variant="outline" className="rounded-xl" onClick={() => selectedSale && handleCopyLink(selectedSale.folio)}>
+              <Button variant="outline" className="rounded-xl" onClick={() => selectedSale && handleCopyLink(selectedSale)}>
                 <Copy className="w-4 h-4 mr-2" /> Copiar Link
               </Button>
               <Button className="rounded-xl" onClick={() => selectedSale && handleWhatsApp(selectedSale)}>

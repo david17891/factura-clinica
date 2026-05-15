@@ -37,6 +37,7 @@ export interface Sale {
   id: string;
   clinic_id: string;
   folio: string;
+  public_invoice_token: string;
   patient_name: string;
   patient_phone: string | null;
   patient_email: string | null;

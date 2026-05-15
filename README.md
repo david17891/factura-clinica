@@ -1,25 +1,25 @@
-# FiscoBot — v0.2C
+# FiscoBot — v0.2E
 
-> **Estado:** Prototipo funcional interno (en reparación de seguridad para MVP piloto)
+> **Estado:** MVP piloto interno con datos demo — listo para prueba controlada
 
-FiscoBot es un sistema administrativo para clínicas pequeñas y dentales en México. Organiza solicitudes de factura mediante QR fijo, QR por venta, link de WhatsApp y formulario público.
+FiscoBot es un sistema administrativo para clinicas pequenas y dentales en Mexico. Organiza solicitudes de factura mediante QR fijo, QR por venta, link de WhatsApp y formulario publico.
 
 ---
 
-## ⚠️ Avisos de Estado
+## Avisos
 
-- **NO usar con datos reales aún** — el sistema está en fase de auditoría de seguridad.
+- **NO usar con datos reales aun** — usar unicamente datos ficticios de prueba.
 - **Constancia Fiscal (CSF):** Pendiente de implementar.
-- **PAC/CFDI automático:** Pendiente de implementar.
+- **PAC/CFDI automatico:** Pendiente de implementar.
 - **Pagos con tarjeta:** No implementado.
-- **WhatsApp API real:** No implementado (solo links manuales).
-- **Datos de demo:** Usar únicamente datos ficticios de prueba.
+- **WhatsApp API real:** No implementado (solo links manuales wa.me).
+- **No es expediente clinico** — no guarda diagnosticos ni notas clinicas.
 
 ---
 
-## 🛠️ Stack
+## Stack
 
-- **Framework:** Next.js 16 (App Router)
+- **Framework:** Next.js 16 (App Router, proxy.ts)
 - **Lenguaje:** TypeScript
 - **Estilos:** Tailwind CSS v4 + shadcn/ui
 - **Backend/Auth/DB:** Supabase (PostgreSQL 17, Auth, RLS)
@@ -27,26 +27,20 @@ FiscoBot es un sistema administrativo para clínicas pequeñas y dentales en Mé
 
 ---
 
-## 🚀 Inicio Rápido
+## Inicio Rapido
 
 ### 1. Variables de entorno
 
-Copia `.env.example` a `.env.local` y completa los valores:
-
-```bash
-cp .env.example .env.local
-```
-
-Edita `.env.local`:
+Crea `.env.local`:
 
 ```env
-# Obligatorio — URL pública de tu proyecto Supabase
+# Obligatorio — URL publica de tu proyecto Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
 
-# Obligatorio — Llave anon (pública, segura para el cliente)
+# Obligatorio — Llave anon (publica, segura para el cliente)
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_llave_anon
 
-# OPCIONAL — Solo para scripts de administración server-side
+# OPCIONAL — Solo para scripts de administracion server-side
 # NO requerida para el flujo normal del MVP
 # NUNCA exponer en variables NEXT_PUBLIC_
 # SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
@@ -57,19 +51,21 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_llave_anon
 Ejecuta **en orden** en el SQL Editor de tu proyecto Supabase:
 
 1. `supabase/migrations/20260515000000_init.sql` — Esquema base
-2. `supabase/migrations/20260515000001_schema_hardening.sql` — Índices, RLS mejorado
+2. `supabase/migrations/20260515000001_schema_hardening.sql` — Indices, RLS mejorado
 3. `supabase/migrations/20260515000002_seed_data.sql` — Datos demo (opcional)
-4. `supabase/migrations/20260515000003_security_integrity.sql` — **v0.2C: correcciones de seguridad**
+4. `supabase/migrations/20260515000003_security_integrity.sql` — Correcciones de seguridad v0.2C
+5. `supabase/migrations/20260515000004_public_qr_flow.sql` — v0.2D: flujo publico QR + hardening
+6. `supabase/migrations/20260515000005_public_invoice_token.sql` — **v0.2E: token publico no enumerable**
 
 ### 3. Crear usuarios demo
 
-Después de aplicar las migraciones, crea usuarios en el Auth Dashboard de Supabase:
+Despues de aplicar las migraciones, crea usuarios en el Auth Dashboard de Supabase:
 
-| Email | Rol | Clínica |
+| Email | Rol | Clinica |
 |---|---|---|
 | `admin@dentalrio.test` | `clinic_admin` | `dental-rio-colorado` |
 | `recepcion@dentalrio.test` | `reception` | `dental-rio-colorado` |
-| `contador@demo.test` | `accountant` | (asignado por relación) |
+| `contador@demo.test` | `accountant` | (asignado por relacion) |
 
 Luego ejecuta en SQL Editor:
 
@@ -98,68 +94,102 @@ npm run dev
 
 ---
 
-## 🧪 Verificación
+## Verificacion
 
 ```bash
-npm run lint        # Debe pasar sin errores
-npm run typecheck   # Debe pasar en workspace frío (sin npm run build previo)
-npm run build       # Build de producción
+npm run lint        # 0 errores, 0 warnings
+npm run typecheck   # TypeScript --noEmit
+npm run build       # Build de produccion
 ```
 
 ---
 
-## 🔒 Seguridad (v0.2C)
+## Seguridad (v0.2E)
 
 - **RLS habilitado** en todas las tablas.
-- **Formulario público** usa RPC `submit_invoice_request` (SECURITY DEFINER) — no inserta directamente.
-- **Folio de venta** generado con función transaccional `generate_sale_folio` — sin colisiones concurrentes.
-- **Integridad `sale_id/clinic_id`:** FK compuesta garantiza que solicitudes no pueden apuntar a ventas de otra clínica.
-- **Duplicados:** Índice único parcial previene múltiples solicitudes activas por venta.
-- **assignUuidAction:** Solo `clinic_admin` y `accountant` pueden asignar UUID. Bloquea sobreescritura.
-- **Service Role:** No requerida en el flujo normal. Nunca exponer como `NEXT_PUBLIC_`.
+- **Formulario publico** usa RPC `submit_invoice_request` (SECURITY DEFINER, search_path seguro).
+- **QR por venta publico** usa token UUID no enumerable (`public_invoice_token`) — NO usa folio secuencial en URLs publicas.
+- **RPC `get_public_sale_invoice_context_by_token`:** valida token + clinic_slug, devuelve solo clinic_name, clinic_slug, sale_folio, service_name, amount. **NO expone patient_name, payment_method, payment_reference, ni IDs internos.**
+- **QR fijo publico** usa RPC `get_public_clinic_invoice_context` (SECURITY DEFINER).
+- **Folio de venta** generado con `generate_sale_folio` — valida rol y clinic_id del caller dentro de la funcion.
+- **Integridad `sale_id/clinic_id`:** FK compuesta previene cross-clinica.
+- **Duplicados:** Indice unico parcial previene multiples solicitudes activas por sale_id.
+- **assignUuidAction:** Solo `clinic_admin` y `accountant`. Bloquea sobreescritura.
+- **updateInvoiceRequestStatusAction:** Valida rol, alcance y transiciones permitidas.
+- **exportRequestsCsvAction:** Filtra por rol y clinica asignada.
+- **Service Role:** No requerida en flujo normal. Nunca exponer como `NEXT_PUBLIC_`.
+- **SECURITY DEFINER functions:** Todas con `SET search_path = public, pg_temp`.
+- **No hay logs de datos fiscales** en console.error.
+- **Ruta `/factura/[slug]/[folio]` deprecada** — responde notFound para evitar enumeracion de folios.
 
 ---
 
-## 📂 Estructura
+## Estructura
 
 ```
 app/
-  (auth)/login/          # Autenticación
-  (dashboard)/           # Panel administrativo protegido
-    page.tsx             # Dashboard resumen
-    sales/               # Registro de ventas
-    requests/            # Bandeja de solicitudes
-    qr/                  # QR fijo de la clínica
-  factura/[slug]/        # QR fijo público
-  factura/[slug]/[folio] # QR por venta público
+  dashboard/             # Panel administrativo protegido
+    page.tsx             # Dashboard resumen (stats reales)
+    sales/               # Registro de ventas (datos reales)
+    requests/            # Bandeja de solicitudes (datos reales)
+    qr/                  # QR fijo de la clinica (datos reales)
+  factura/[slug]/        # QR fijo publico (RPC segura)
+  factura/[slug]/v/[token]  # QR por venta publico (token no enumerable)
+  factura/[slug]/[folio] # DEPRECADA — responde notFound
+  (auth)/login/          # Autenticacion
   page.tsx               # Landing
 lib/
   actions/               # Server actions (validados por rol)
-  auth/                  # Helpers de sesión y permisos
+  auth/                  # Helpers de sesion y permisos
   data/                  # Queries de datos
   supabase/              # Clientes server/client/middleware
 supabase/
   migrations/            # Historial de esquema SQL
 types/
   index.ts               # Tipos TypeScript compartidos
+proxy.ts                 # Auth guard + session refresh (Next 16)
 ```
 
 ---
 
-## 📋 Changelog
+## Changelog
+
+### v0.2E — Public Invoice Token + Secure QR Flow
+- **`public_invoice_token` en sales:** UUID generado automaticamente, unico, no enumerable, no derivado del folio
+- **RPC `get_public_sale_invoice_context_by_token`:** Reemplaza la version por folio — valida token + slug, NO expone patient_name ni payment_method
+- **Ruta `/factura/[slug]/v/[token]`:** Nueva ruta publica para QR por venta con token no enumerable
+- **Ruta `/factura/[slug]/[folio]` deprecada:** Responde notFound — ya no expone datos por folio secuencial
+- **`submit_invoice_request` actualizada:** Acepta `p_public_invoice_token` en lugar de `p_sale_folio`
+- **Dashboard sales:** Genera links y QR con token, no con folio
+- **WhatsApp:** Usa link con token, no con folio
+- **Formulario publico:** No precarga patient_name desde venta — el paciente lo captura
+- **RPC folio-based eliminada:** `get_public_sale_invoice_context` removida (insegura)
+- **Migracion 000005:** Backfill de tokens para ventas existentes, unique index, default gen_random_uuid()
+
+### v0.2D — Public QR Flow + Security Hardening
+- **RPC `get_public_sale_invoice_context`:** Permite anon obtener datos minimos de venta para formulario sin abrir SELECT en tabla `sales`
+- **RPC `get_public_clinic_invoice_context`:** Permite anon obtener datos minimos de clinica sin SELECT directo
+- **`/factura/[slug]/[folio]`** ahora usa RPC publica — paciente anon puede abrir folio valido
+- **`/factura/[slug]`** ahora usa RPC publica — consistente con QR por venta
+- **`generate_sale_folio`:** Valida rol y clinic_id del caller dentro de la funcion — usuario de otra clinica no puede avanzar contador ajeno
+- **Todas las funciones SECURITY DEFINER** ahora tienen `SET search_path = public, pg_temp`
+- **`console.error`** en `assignUuidAction` ya no registra datos sensibles
+- **`.env.local.example`:** `SUPABASE_SERVICE_ROLE_KEY` comentada y marcada SERVER ONLY
+- **`middleware.ts` → `proxy.ts`:** Migrado a convencion Next 16
+- **0 warnings de lint**
 
 ### v0.2C — Security & Integrity Repair
-- Eliminada inserción pública directa en `invoice_requests` (`WITH CHECK (true)`)
-- Formulario público migrado a RPC `submit_invoice_request` (SECURITY DEFINER)
-- FK compuesta `(sale_id, clinic_id)` previene solicitudes cross-clínica
-- Índice único parcial previene duplicados activos por `sale_id`
-- `createSaleAction`: `clinic_id` desde perfil server-side; folio vía RPC transaccional
-- `assignUuidAction`: validación explícita de rol, alcance y UUID no vacío; bloquea sobreescritura
-- `updateInvoiceRequestStatusAction`: validación de rol, alcance y transiciones permitidas
-- `exportRequestsCsvAction`: validación de rol y filtrado por clínica asignada
+- Eliminada insercion publica directa en `invoice_requests` (`WITH CHECK (true)`)
+- Formulario publico migrado a RPC `submit_invoice_request` (SECURITY DEFINER)
+- FK compuesta `(sale_id, clinic_id)` previene solicitudes cross-clinica
+- Indice unico parcial previene duplicados activos por `sale_id`
+- `createSaleAction`: `clinic_id` desde perfil server-side; folio via RPC transaccional
+- `assignUuidAction`: validacion explicita de rol, alcance y UUID no vacio; bloquea sobreescritura
+- `updateInvoiceRequestStatusAction`: validacion de rol, alcance y transiciones permitidas
+- `exportRequestsCsvAction`: validacion de rol y filtrado por clinica asignada
 
 ### v0.2B — Prototipo funcional interno
 - Dashboard con ventas y solicitudes reales
 - Auth Supabase, RLS habilitado
 - QR por venta y QR fijo
-- Exportación CSV
+- Exportacion CSV

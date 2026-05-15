@@ -67,7 +67,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
       paymentDate: new Date().toISOString().split('T')[0],
       amount: sale?.amount?.toString() || '',
       serviceName: sale?.service_name || '',
-      patientName: sale?.patient_name || '',
+      patientName: '',
     },
   })
 
@@ -80,21 +80,21 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
       // No se envía clinic_id ni sale_id directamente — el servidor los resuelve desde slug/folio.
       const supabase = createClient()
       const { data: rpcData, error: rpcError } = await supabase.rpc('submit_invoice_request', {
-        p_clinic_slug:    clinic.slug,
-        p_sale_folio:     sale?.folio ?? null,
-        p_patient_name:   values.patientName || null,
-        p_patient_phone:  null,
-        p_payment_date:   values.paymentDate ? new Date(values.paymentDate).toISOString() : null,
-        p_amount:         values.amount ? parseFloat(values.amount) : null,
-        p_service_name:   values.serviceName || null,
-        p_payment_method: null,
-        p_email:          values.email,
-        p_rfc:            values.rfc,
-        p_legal_name:     values.legalName,
-        p_tax_zip_code:   values.taxZipCode,
-        p_tax_regime:     values.taxRegime,
-        p_cfdi_use:       values.cfdiUse,
-        p_notes:          values.notes || null,
+        p_clinic_slug:          clinic.slug,
+        p_public_invoice_token: sale?.public_invoice_token ?? null,
+        p_patient_name:         values.patientName || null,
+        p_patient_phone:        null,
+        p_payment_date:         values.paymentDate ? new Date(values.paymentDate).toISOString() : null,
+        p_amount:               values.amount ? parseFloat(values.amount) : null,
+        p_service_name:         values.serviceName || null,
+        p_payment_method:       null,
+        p_email:                values.email,
+        p_rfc:                  values.rfc,
+        p_legal_name:           values.legalName,
+        p_tax_zip_code:         values.taxZipCode,
+        p_tax_regime:           values.taxRegime,
+        p_cfdi_use:             values.cfdiUse,
+        p_notes:                values.notes || null,
       })
 
       if (rpcError) {

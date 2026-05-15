@@ -15,7 +15,8 @@ import { canUpdateRequestStatus, canAssignUuid } from '@/lib/auth/permissions'
 
 // Exportamos un stub para evitar errores de importación en código legado
 // que aún no haya sido migrado a usar la RPC.
-export async function createInvoiceRequestAction(_: unknown) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function createInvoiceRequestAction(_input: unknown) {
   return {
     error:
       'Este método está deshabilitado. El formulario público debe usar la RPC submit_invoice_request.',
@@ -192,7 +193,7 @@ export async function assignUuidAction(requestId: string, cfdiUuid: string) {
 
   if (docError) {
     // No revertir — el UUID ya fue guardado. Solo reportar el error secundario.
-    console.error('Error al crear invoice_document:', docError.message)
+    console.error('Error al crear invoice_document: error secundario, UUID ya guardado')
   }
 
   revalidatePath('/dashboard/requests')

@@ -2,14 +2,41 @@ import { notFound } from 'next/navigation'
 import { InvoiceRequestForm } from '@/components/public/InvoiceRequestForm'
 import { Card, CardContent } from '@/components/ui/card'
 import { Building2, MapPin, Phone } from 'lucide-react'
-import { getClinicBySlug } from '@/lib/data/clinics'
+import { createClient } from '@/lib/supabase/server'
+
+interface ClinicContext {
+  clinic_name: string
+  clinic_slug: string
+  address: string | null
+  phone: string | null
+}
 
 export default async function FixedQrPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const clinic = await getClinicBySlug(slug)
+  const supabase = await createClient()
 
-  if (!clinic) {
+  // Usar RPC publica SECURITY DEFINER para obtener datos minimos de clinica.
+  // Esto evita depender de SELECT directo con RLS anon.
+  const { data, error } = await supabase.rpc('get_public_clinic_invoice_context', {
+    p_clinic_slug: slug,
+  })
+
+  if (error || !data || data.length === 0) {
     notFound()
+  }
+
+  const ctx = data[0] as ClinicContext
+
+  const clinic = {
+    id: '',
+    name: ctx.clinic_name,
+    legal_name: null,
+    slug: ctx.clinic_slug,
+    phone: ctx.phone,
+    email: null,
+    address: ctx.address,
+    logo_url: null,
+    created_at: '',
   }
 
   return (
