@@ -477,7 +477,7 @@ export default function RequestsPage() {
                               <Eye className="w-4 h-4 mr-2" /> Detalle
                             </SheetTrigger>
                           </Button>
-                          <SheetContent className="sm:max-w-md rounded-l-3xl glass">
+                          <SheetContent className="sm:max-w-md rounded-l-3xl glass overflow-y-auto">
                             <SheetHeader>
                               <SheetTitle>Detalle de solicitud</SheetTitle>
                               <SheetDescription>
