@@ -74,7 +74,7 @@ export default async function SaleTokenPage({
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
               {clinic.name}
             </h1>
-            <p className="text-slate-500 dark:text-slate-400">Folio: {sale.folio}</p>
+            <p className="text-slate-500 dark:text-slate-400">Solicitud ligada a pago registrado</p>
           </div>
         </header>
 
@@ -99,7 +99,7 @@ export default async function SaleTokenPage({
         </Card>
 
         <footer className="text-center text-xs text-slate-400 pb-8">
-          Powered by FiscoBot &copy; {new Date().getFullYear()}
+          Factura Clínica - Portal fiscal para clínicas
         </footer>
       </div>
     </main>

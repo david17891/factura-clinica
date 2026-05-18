@@ -87,3 +87,18 @@ export interface InvoiceDocument {
   issued_at: string;
   created_at: string;
 }
+
+export type CsfExtractionStatus = 'not_attempted' | 'extracted' | 'failed' | 'manual_review';
+
+export interface InvoiceRequestCsfDocument {
+  id: string;
+  invoice_request_id: string;
+  clinic_id: string;
+  storage_path: string;
+  original_filename: string;
+  mime_type: string;
+  file_size: number;
+  extraction_status: CsfExtractionStatus;
+  extracted_data: Record<string, unknown>;
+  created_at: string;
+}

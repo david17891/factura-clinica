@@ -10,6 +10,7 @@ import {
   ClipboardList,
   FileText,
   Home,
+  Landmark,
   LogOut,
   Menu,
   QrCode,
@@ -33,7 +34,8 @@ const navItems = [
   { label: 'Inicio', icon: Home, href: '/dashboard' },
   { label: 'Ventas', icon: ClipboardList, href: '/dashboard/sales' },
   { label: 'Solicitudes', icon: FileText, href: '/dashboard/requests' },
-  { label: 'QR Clinica', icon: QrCode, href: '/dashboard/qr' },
+  { label: 'QR fijo', icon: QrCode, href: '/dashboard/qr' },
+  { label: 'Sitio publico', icon: Landmark, href: '/' },
 ]
 
 function SidebarContent({ user, pathname, onLogout }: { user: { email: string } | null; pathname: string; onLogout: () => void }) {
@@ -43,7 +45,10 @@ function SidebarContent({ user, pathname, onLogout }: { user: { email: string } 
         <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
           <Building2 className="w-6 h-6 text-white" />
         </div>
-        <span className="text-xl font-bold tracking-tight">FiscoBot</span>
+        <div className="leading-tight">
+          <span className="block text-lg font-bold tracking-tight">Factura Clínica</span>
+          <span className="block text-xs text-slate-500">Portal fiscal</span>
+        </div>
       </div>
 
       <nav className="flex-1 px-4 space-y-1">
@@ -108,7 +113,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    toast.success('Sesion cerrada')
+    toast.success('Sesión cerrada')
     router.push('/login')
     router.refresh()
   }
@@ -131,30 +136,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 px-4 md:px-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Sheet>
-              <SheetTrigger>
-                <Button variant="ghost" size="icon" className="lg:hidden rounded-xl">
+              <Button asChild variant="ghost" size="icon" className="lg:hidden rounded-xl">
+                <SheetTrigger>
                   <Menu className="w-5 h-5" />
-                </Button>
-              </SheetTrigger>
+                </SheetTrigger>
+              </Button>
               <SheetContent side="left" className="p-0 w-72">
                 <SidebarContent user={user} pathname={pathname} onLogout={handleLogout} />
               </SheetContent>
             </Sheet>
-            <h2 className="text-lg font-semibold lg:hidden">FiscoBot</h2>
+            <h2 className="text-lg font-semibold lg:hidden">Factura Clínica</h2>
           </div>
 
           <div className="flex items-center gap-4">
             <DropdownMenu>
-              <DropdownMenuTrigger>
-                <Button variant="ghost" size="icon" className="rounded-xl border border-slate-200 dark:border-slate-800">
+              <Button asChild variant="ghost" size="icon" className="rounded-xl border border-slate-200 dark:border-slate-800">
+                <DropdownMenuTrigger>
                   <Settings className="w-5 h-5" />
-                </Button>
-              </DropdownMenuTrigger>
+                </DropdownMenuTrigger>
+              </Button>
               <DropdownMenuContent align="end" className="w-56 rounded-2xl">
-                <DropdownMenuLabel>Configuracion</DropdownMenuLabel>
+                <DropdownMenuLabel>Cuenta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive cursor-pointer">
-                  <LogOut className="w-4 h-4 mr-2" /> Cerrar Sesion
+                  <LogOut className="w-4 h-4 mr-2" /> Cerrar sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

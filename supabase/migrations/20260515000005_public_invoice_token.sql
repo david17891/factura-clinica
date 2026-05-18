@@ -17,6 +17,19 @@ UPDATE sales
 SET public_invoice_token = gen_random_uuid()::text
 WHERE public_invoice_token IS NULL;
 
+-- Stable local demo tokens for reproducible manual tests.
+UPDATE sales SET public_invoice_token = '11111111-1111-4111-8111-111111111101'
+WHERE id = '00000000-0000-0000-0000-000000000101';
+
+UPDATE sales SET public_invoice_token = '11111111-1111-4111-8111-111111111102'
+WHERE id = '00000000-0000-0000-0000-000000000102';
+
+UPDATE sales SET public_invoice_token = '11111111-1111-4111-8111-111111111103'
+WHERE id = '00000000-0000-0000-0000-000000000103';
+
+UPDATE sales SET public_invoice_token = '11111111-1111-4111-8111-111111111104'
+WHERE id = '00000000-0000-0000-0000-000000000104';
+
 -- Make it NOT NULL for all future rows
 ALTER TABLE sales ALTER COLUMN public_invoice_token SET NOT NULL;
 
@@ -208,3 +221,13 @@ GRANT EXECUTE ON FUNCTION public.submit_invoice_request(
   TEXT, TEXT, TEXT, TEXT, DATE, NUMERIC, TEXT, TEXT,
   TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT
 ) TO anon, authenticated;
+
+-- Explicit Data API grants. RLS remains the row-level boundary.
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON clinics TO anon, authenticated;
+GRANT SELECT ON profiles TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON sales TO authenticated;
+GRANT SELECT, UPDATE ON invoice_requests TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON invoice_documents TO authenticated;
+GRANT SELECT ON clinic_accountants TO authenticated;
+GRANT SELECT, INSERT ON audit_events TO authenticated;

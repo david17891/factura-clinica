@@ -33,8 +33,9 @@ export async function exportRequestsCsvAction() {
       payment_date,
       source,
       created_at,
-      clinics(name),
-      sales(folio, sale_date)
+      clinics!invoice_requests_clinic_id_fkey(name),
+      sales!invoice_requests_sale_id_fkey(folio, created_at),
+      invoice_request_csf_documents(id)
     `)
     .order('created_at', { ascending: false })
 
@@ -57,12 +58,13 @@ export async function exportRequestsCsvAction() {
 
   const rows = (data || []).map((r) => {
     const row = r as Record<string, unknown>
-    const clinics = row.clinics as { name: string }[] | null
-    const sales = row.sales as { folio: string; sale_date: string }[] | null
+    const clinics = row.clinics as { name: string } | null
+    const sales = row.sales as { folio: string; created_at: string } | null
+    const csfDocuments = row.invoice_request_csf_documents as Array<{ id: string }> | null
     return {
-      clinica: clinics?.[0]?.name || '',
-      folio_venta: sales?.[0]?.folio || '',
-      fecha_venta: sales?.[0]?.sale_date || '',
+      clinica: clinics?.name || '',
+      folio_venta: sales?.folio || '',
+      fecha_venta: sales?.created_at || '',
       paciente: (row.patient_name as string) || '',
       telefono: (row.patient_phone as string) || '',
       correo: (row.email as string) || '',
@@ -76,6 +78,7 @@ export async function exportRequestsCsvAction() {
       uso_cfdi: (row.cfdi_use as string) || '',
       estado: (row.status as string) || '',
       uuid: (row.uuid as string) || '',
+      constancia_subida: csfDocuments?.length ? 'sí' : 'no',
       notas: (row.notes as string) || '',
     }
   })

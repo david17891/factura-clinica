@@ -67,14 +67,14 @@ interface SaleRow {
 }
 
 const statusMap: Record<string, { label: string; variant: 'outline' | 'secondary' | 'default' }> = {
-  not_requested: { label: 'Pendiente', variant: 'outline' },
-  fiscal_data_pending: { label: 'Datos Pendientes', variant: 'outline' },
-  fiscal_data_received: { label: 'Datos Recibidos', variant: 'secondary' },
-  ready_to_invoice: { label: 'Listo para Facturar', variant: 'default' },
-  sent_to_accountant: { label: 'Enviado al Contador', variant: 'default' },
-  issued: { label: 'Facturado', variant: 'default' },
-  rejected: { label: 'Rechazado', variant: 'outline' },
-  cancelled: { label: 'Cancelado', variant: 'outline' },
+  not_requested: { label: 'Sin datos recibidos', variant: 'outline' },
+  fiscal_data_pending: { label: 'Datos pendientes', variant: 'outline' },
+  fiscal_data_received: { label: 'Datos recibidos', variant: 'secondary' },
+  ready_to_invoice: { label: 'Lista para facturar', variant: 'default' },
+  sent_to_accountant: { label: 'Enviada al contador', variant: 'default' },
+  issued: { label: 'Emitida', variant: 'default' },
+  rejected: { label: 'Rechazada', variant: 'outline' },
+  cancelled: { label: 'Cancelada', variant: 'outline' },
 }
 
 export default function SalesPage() {
@@ -86,6 +86,10 @@ export default function SalesPage() {
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [emptyState, setEmptyState] = useState({
+    title: 'Aun no hay ventas registradas',
+    description: 'Crea una venta para generar un QR o link fiscal.',
+  })
 
   useEffect(() => {
     async function fetchSales() {
@@ -104,6 +108,11 @@ export default function SalesPage() {
           .eq('id', profile.clinic_id)
           .single()
         if (clinic) setClinicSlug(clinic.slug)
+      } else if (profile?.role !== 'superadmin') {
+        setEmptyState({
+          title: 'No tienes una clínica asignada',
+          description: 'Solicita a un administrador que revise tu perfil.',
+        })
       }
 
       let query = supabase.from('sales').select('*').order('created_at', { ascending: false })
@@ -162,6 +171,7 @@ export default function SalesPage() {
     const paymentMethod = formData.get('method') as string
     const patientPhone = formData.get('phone') as string
     const patientEmail = formData.get('email') as string
+    const reference = formData.get('reference') as string
 
     if (!patientName || !serviceName || !amountStr || !paymentMethod) {
       toast.error('Completa los campos obligatorios')
@@ -180,7 +190,7 @@ export default function SalesPage() {
     const clinicId = profile.data?.clinic_id
 
     if (!clinicId) {
-      toast.error('No tienes una clinica asignada')
+      toast.error('No tienes una clínica asignada')
       setSubmitting(false)
       return
     }
@@ -193,6 +203,7 @@ export default function SalesPage() {
       service_name: serviceName,
       amount,
       payment_method: paymentMethod,
+      reference: reference || undefined,
     })
 
     if (result.error) {
@@ -215,27 +226,30 @@ export default function SalesPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Registro de Ventas</h1>
-          <p className="text-muted-foreground">Administra las ventas y genera links de facturacion.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Ventas y links fiscales</h1>
+          <p className="text-muted-foreground">Registra un pago para generar un QR o link fiscal unico.</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Después de cobrar, recepción puede registrar la venta y compartir un link seguro para que el paciente complete sus datos fiscales.
+          </p>
         </div>
         <Dialog open={isAddingSale} onOpenChange={setIsAddingSale}>
-          <DialogTrigger>
-            <Button className="rounded-xl shadow-lg shadow-primary/10">
-              <Plus className="w-4 h-4 mr-2" /> Nueva Venta
-            </Button>
-          </DialogTrigger>
+          <Button asChild className="rounded-xl shadow-lg shadow-primary/10">
+            <DialogTrigger>
+              <Plus className="w-4 h-4 mr-2" /> Nueva venta
+            </DialogTrigger>
+          </Button>
           <DialogContent className="sm:max-w-[525px] rounded-3xl glass">
             <DialogHeader>
-              <DialogTitle>Registrar Venta</DialogTitle>
+              <DialogTitle>Registrar pago</DialogTitle>
               <DialogDescription>
-                Ingresa los detalles del pago realizado por el paciente.
+                Guarda los datos basicos de la venta para generar un link seguro de factura.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreateSale}>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="patient">Nombre del Paciente</Label>
+                    <Label htmlFor="patient">Nombre del paciente</Label>
                     <Input id="patient" name="patient" placeholder="Nombre completo" className="rounded-xl" required />
                   </div>
                   <div className="space-y-2">
@@ -244,7 +258,7 @@ export default function SalesPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Correo electronico</Label>
+                  <Label htmlFor="email">Correo opcional</Label>
                   <Input id="email" name="email" type="email" placeholder="paciente@email.com" className="rounded-xl" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -270,7 +284,7 @@ export default function SalesPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="method">Metodo de Pago</Label>
+                  <Label htmlFor="method">Metodo de pago</Label>
                   <Select name="method" required>
                     <SelectTrigger className="rounded-xl">
                       <SelectValue placeholder="Seleccione" />
@@ -282,10 +296,14 @@ export default function SalesPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reference">Referencia opcional</Label>
+                  <Input id="reference" name="reference" placeholder="Autorizacion, transferencia o nota interna" className="rounded-xl" />
+                </div>
               </div>
               <DialogFooter>
                 <Button type="submit" className="rounded-xl w-full" disabled={submitting}>
-                  {submitting ? 'Guardando...' : 'Guardar y Generar QR'}
+                  {submitting ? 'Guardando...' : 'Guardar y generar link fiscal'}
                 </Button>
               </DialogFooter>
             </form>
@@ -307,8 +325,9 @@ export default function SalesPage() {
         </CardHeader>
         <CardContent className="p-0">
           {filteredSales.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              No hay ventas registradas. Crea la primera con el boton &quot;Nueva Venta&quot;.
+            <div className="p-10 text-center">
+              <p className="font-semibold">{emptyState.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{emptyState.description}</p>
             </div>
           ) : (
             <Table>
@@ -318,7 +337,7 @@ export default function SalesPage() {
                   <TableHead>Paciente</TableHead>
                   <TableHead>Servicio</TableHead>
                   <TableHead>Monto</TableHead>
-                  <TableHead>Estado</TableHead>
+                  <TableHead>Estado de solicitud</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -339,25 +358,25 @@ export default function SalesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="rounded-full" title="Link de factura" onClick={() => handleCopyLink(sale)}>
+                        <Button variant="ghost" size="icon" className="rounded-full" title="Copiar link seguro de factura" onClick={() => handleCopyLink(sale)}>
                           <Copy className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="rounded-full text-emerald-600" title="Enviar WhatsApp" onClick={() => handleWhatsApp(sale)}>
+                        <Button variant="ghost" size="icon" className="rounded-full text-emerald-600" title="Enviar link por WhatsApp" onClick={() => handleWhatsApp(sale)}>
                           <MessageCircle className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="rounded-full text-primary" title="Ver QR" onClick={() => { setSelectedSale(sale); setIsQrOpen(true); }}>
+                        <Button variant="ghost" size="icon" className="rounded-full text-primary" title="Ver QR por venta" onClick={() => { setSelectedSale(sale); setIsQrOpen(true); }}>
                           <QrCode className="h-4 w-4" />
                         </Button>
                         <DropdownMenu>
-                          <DropdownMenuTrigger>
-                            <Button variant="ghost" size="icon" className="rounded-full">
+                          <Button asChild variant="ghost" size="icon" className="rounded-full">
+                            <DropdownMenuTrigger>
                               <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
+                            </DropdownMenuTrigger>
+                          </Button>
                           <DropdownMenuContent align="end" className="rounded-2xl">
                             <DropdownMenuLabel>Opciones</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleCopyLink(sale)}>Copiar link</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleWhatsApp(sale)}>Enviar WhatsApp</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopyLink(sale)}>Copiar link seguro</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleWhatsApp(sale)}>Enviar link por WhatsApp</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -373,9 +392,9 @@ export default function SalesPage() {
       <Dialog open={isQrOpen} onOpenChange={setIsQrOpen}>
         <DialogContent className="sm:max-w-[400px] rounded-3xl glass text-center">
           <DialogHeader>
-            <DialogTitle>QR de Facturacion</DialogTitle>
+            <DialogTitle>Link seguro de factura</DialogTitle>
             <DialogDescription>
-              Escanea este codigo para solicitar tu factura.
+              Comparte este QR o link para que el paciente envíe sus datos fiscales. Se abrirá WhatsApp con un mensaje prellenado; recepción solo debe presionar enviar.
             </DialogDescription>
           </DialogHeader>
           <div className="py-8 flex flex-col items-center gap-6">
@@ -390,13 +409,13 @@ export default function SalesPage() {
               )}
             </div>
             <div className="space-y-1">
-              <p className="font-bold text-lg">{selectedSale?.folio}</p>
+              <p className="font-bold text-lg">Folio interno {selectedSale?.folio}</p>
               <p className="text-sm text-muted-foreground">{selectedSale?.patient_name}</p>
               <p className="text-xl font-bold text-primary">${selectedSale ? Number(selectedSale.amount).toLocaleString() : 0}</p>
             </div>
             <div className="grid grid-cols-2 gap-3 w-full">
               <Button variant="outline" className="rounded-xl" onClick={() => selectedSale && handleCopyLink(selectedSale)}>
-                <Copy className="w-4 h-4 mr-2" /> Copiar Link
+                <Copy className="w-4 h-4 mr-2" /> Copiar link
               </Button>
               <Button className="rounded-xl" onClick={() => selectedSale && handleWhatsApp(selectedSale)}>
                 <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp

@@ -17,6 +17,7 @@ import {
   Search,
   Download,
   Eye,
+  ExternalLink,
   CheckCircle2,
   XCircle,
   Clock,
@@ -37,6 +38,17 @@ import { toast } from 'sonner'
 import Papa from 'papaparse'
 import { updateInvoiceRequestStatusAction, assignUuidAction } from '@/lib/actions/invoice-requests'
 import { exportRequestsCsvAction } from '@/lib/actions/exports'
+import { createCsfDocumentSignedUrlAction } from '@/lib/actions/csf-documents'
+
+interface CsfDocumentRow {
+  id: string
+  original_filename: string
+  mime_type: string
+  file_size: number
+  extraction_status: string
+  extracted_data: Record<string, unknown>
+  created_at: string
+}
 
 interface RequestRow {
   id: string
@@ -59,18 +71,21 @@ interface RequestRow {
   rejection_reason: string | null
   source: string
   created_at: string
-  sales: { folio: string; service_name: string; amount: number } | null
+  sales: { folio: string; service_name: string; amount: number; created_at: string } | null
+  invoice_request_csf_documents: CsfDocumentRow[]
 }
 
 const statusConfig: Record<string, { label: string; color: string; icon: typeof Info }> = {
-  fiscal_data_received: { label: 'Recibido', color: 'bg-blue-100 text-blue-700', icon: Clock },
-  fiscal_data_pending: { label: 'Datos Pendientes', color: 'bg-amber-100 text-amber-700', icon: Clock },
-  ready_to_invoice: { label: 'Listo', color: 'bg-emerald-100 text-emerald-700', icon: FileCheck },
-  sent_to_accountant: { label: 'Enviado al Contador', color: 'bg-purple-100 text-purple-700', icon: FileCheck },
-  issued: { label: 'Facturado', color: 'bg-slate-100 text-slate-700', icon: CheckCircle2 },
-  rejected: { label: 'Rechazado', color: 'bg-red-100 text-red-700', icon: XCircle },
-  cancelled: { label: 'Cancelado', color: 'bg-gray-100 text-gray-700', icon: XCircle },
+  fiscal_data_received: { label: 'Datos recibidos', color: 'bg-blue-100 text-blue-700', icon: Clock },
+  fiscal_data_pending: { label: 'Datos pendientes', color: 'bg-amber-100 text-amber-700', icon: Clock },
+  ready_to_invoice: { label: 'Lista para facturar', color: 'bg-emerald-100 text-emerald-700', icon: FileCheck },
+  sent_to_accountant: { label: 'Enviada al contador', color: 'bg-purple-100 text-purple-700', icon: FileCheck },
+  issued: { label: 'Emitida', color: 'bg-slate-100 text-slate-700', icon: CheckCircle2 },
+  rejected: { label: 'Rechazada', color: 'bg-red-100 text-red-700', icon: XCircle },
+  cancelled: { label: 'Cancelada', color: 'bg-gray-100 text-gray-700', icon: XCircle },
 }
+
+const requestsSelect = '*, sales!invoice_requests_sale_id_fkey(folio, service_name, amount, created_at), invoice_request_csf_documents(id, original_filename, mime_type, file_size, extraction_status, extracted_data, created_at)'
 
 export default function RequestsPage() {
   const [requests, setRequests] = useState<RequestRow[]>([])
@@ -78,31 +93,111 @@ export default function RequestsPage() {
   const [selectedRequest, setSelectedRequest] = useState<RequestRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [uuidInput, setUuidInput] = useState('')
+  const [emptyState, setEmptyState] = useState({
+    title: 'Aun no hay solicitudes de factura',
+    description: 'Comparte el QR fijo o genera una venta con link fiscal.',
+  })
+
+  async function fetchRequests() {
+    const supabase = createClient()
+
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('clinic_id, role')
+      .eq('id', user?.id)
+      .single()
+
+    let query = supabase
+      .from('invoice_requests')
+      .select(requestsSelect)
+      .order('created_at', { ascending: false })
+
+    if (profile?.clinic_id && profile.role !== 'superadmin') {
+      query = query.eq('clinic_id', profile.clinic_id)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      toast.error(error.message)
+    } else if (data) {
+      setRequests(data as unknown as RequestRow[])
+      if (data.length === 0 && profile?.role === 'accountant') {
+        const { data: assignments } = await supabase
+          .from('clinic_accountants')
+          .select('clinic_id')
+          .eq('accountant_id', user?.id)
+          .limit(1)
+        setEmptyState(assignments?.length
+          ? {
+              title: 'Aun no hay solicitudes de factura',
+              description: 'Cuando la clínica reciba datos fiscales, aparecerán aquí.',
+            }
+          : {
+              title: 'No tienes clínicas asignadas',
+              description: 'Cuando una clínica te asigne como contador, verás sus solicitudes aquí.',
+            })
+      } else if (data.length === 0 && !profile?.clinic_id && profile?.role !== 'superadmin') {
+        setEmptyState({
+          title: 'No tienes una clínica asignada',
+          description: 'Solicita a un administrador que revise tu perfil.',
+        })
+      }
+    }
+    setLoading(false)
+  }
 
   useEffect(() => {
-    async function fetchRequests() {
+    async function loadInitialRequests() {
       const supabase = createClient()
 
+      const { data: { user } } = await supabase.auth.getUser()
       const { data: profile } = await supabase
         .from('profiles')
         .select('clinic_id, role')
-        .eq('id', (await supabase.auth.getUser()).data.user?.id)
+        .eq('id', user?.id)
         .single()
 
       let query = supabase
         .from('invoice_requests')
-        .select('*, sales(folio, service_name, amount)')
+        .select(requestsSelect)
         .order('created_at', { ascending: false })
 
       if (profile?.clinic_id && profile.role !== 'superadmin') {
         query = query.eq('clinic_id', profile.clinic_id)
       }
 
-      const { data } = await query
-      if (data) setRequests(data as unknown as RequestRow[])
+      const { data, error } = await query
+      if (error) {
+        toast.error(error.message)
+      } else if (data) {
+        setRequests(data as unknown as RequestRow[])
+        if (data.length === 0 && profile?.role === 'accountant') {
+          const { data: assignments } = await supabase
+            .from('clinic_accountants')
+            .select('clinic_id')
+            .eq('accountant_id', user?.id)
+            .limit(1)
+          setEmptyState(assignments?.length
+            ? {
+                title: 'Aun no hay solicitudes de factura',
+                description: 'Cuando la clínica reciba datos fiscales, aparecerán aquí.',
+              }
+            : {
+                title: 'No tienes clínicas asignadas',
+                description: 'Cuando una clínica te asigne como contador, verás sus solicitudes aquí.',
+              })
+        } else if (data.length === 0 && !profile?.clinic_id && profile?.role !== 'superadmin') {
+          setEmptyState({
+            title: 'No tienes una clínica asignada',
+            description: 'Solicita a un administrador que revise tu perfil.',
+          })
+        }
+      }
       setLoading(false)
     }
-    fetchRequests()
+
+    loadInitialRequests()
   }, [])
 
   const filteredRequests = requests.filter(req =>
@@ -110,6 +205,14 @@ export default function RequestsPage() {
     (req.rfc || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (req.sales?.folio || '').toLowerCase().includes(searchTerm.toLowerCase())
   )
+
+  const getAvailableStatusActions = (status: string) => ({
+    canMarkReady: ['fiscal_data_received'].includes(status),
+    canSendAccountant: ['fiscal_data_received', 'ready_to_invoice'].includes(status),
+    canReject: ['fiscal_data_received', 'fiscal_data_pending', 'ready_to_invoice', 'sent_to_accountant'].includes(status),
+    canCancel: ['fiscal_data_received', 'fiscal_data_pending', 'ready_to_invoice', 'sent_to_accountant'].includes(status),
+    canReopen: status === 'rejected',
+  })
 
   const handleExport = async () => {
     const result = await exportRequestsCsvAction()
@@ -128,7 +231,7 @@ export default function RequestsPage() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    toast.success('Exportacion completada')
+    toast.success('Exportación completada')
   }
 
   const handleStatusChange = async (id: string, newStatus: string, rejectionReason?: string) => {
@@ -138,12 +241,7 @@ export default function RequestsPage() {
       return
     }
     toast.success(`Estado actualizado a ${statusConfig[newStatus]?.label || newStatus}`)
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('invoice_requests')
-      .select('*, sales(folio, service_name, amount)')
-      .order('created_at', { ascending: false })
-    if (data) setRequests(data as unknown as RequestRow[])
+    await fetchRequests()
     if (selectedRequest?.id === id) {
       setSelectedRequest(prev => prev ? { ...prev, status: newStatus } : null)
     }
@@ -161,7 +259,22 @@ export default function RequestsPage() {
     }
     toast.success('UUID asignado correctamente')
     setSelectedRequest(prev => prev ? { ...prev, uuid: uuidInput.trim(), status: 'issued' } : null)
+    setRequests(prev => prev.map(req =>
+      req.id === selectedRequest.id
+        ? { ...req, uuid: uuidInput.trim(), status: 'issued' }
+        : req
+    ))
     setUuidInput('')
+    await fetchRequests()
+  }
+
+  const handleViewCsfDocument = async (documentId: string) => {
+    const result = await createCsfDocumentSignedUrlAction(documentId)
+    if (result.error || !result.url) {
+      toast.error(result.error ?? 'No se pudo abrir la constancia')
+      return
+    }
+    window.open(result.url, '_blank', 'noopener,noreferrer')
   }
 
   if (loading) {
@@ -172,11 +285,14 @@ export default function RequestsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Solicitudes de Factura</h1>
-          <p className="text-muted-foreground">Bandeja de entrada de datos fiscales para procesar.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Solicitudes de factura</h1>
+          <p className="text-muted-foreground">Revisa datos fiscales, prepara facturas y cierra solicitudes con UUID.</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Descarga un CSV con los datos fiscales y de venta para apoyar la emision de facturas.
+          </p>
         </div>
         <Button variant="outline" className="rounded-xl border-primary text-primary hover:bg-primary/5" onClick={handleExport}>
-          <Download className="w-4 h-4 mr-2" /> Exportar CSV
+          <Download className="w-4 h-4 mr-2" /> Exportar para contador
         </Button>
       </div>
 
@@ -194,8 +310,9 @@ export default function RequestsPage() {
         </CardHeader>
         <CardContent className="p-0">
           {filteredRequests.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              No hay solicitudes registradas.
+            <div className="p-10 text-center">
+              <p className="font-semibold">{emptyState.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{emptyState.description}</p>
             </div>
           ) : (
             <Table>
@@ -230,14 +347,14 @@ export default function RequestsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Sheet>
-                          <SheetTrigger>
-                            <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => { setSelectedRequest(req); setUuidInput(req.uuid || '') }}>
+                          <Button asChild variant="ghost" size="sm" className="rounded-xl">
+                            <SheetTrigger onClick={() => { setSelectedRequest(req); setUuidInput(req.uuid || '') }}>
                               <Eye className="w-4 h-4 mr-2" /> Detalle
-                            </Button>
-                          </SheetTrigger>
+                            </SheetTrigger>
+                          </Button>
                           <SheetContent className="sm:max-w-md rounded-l-3xl glass">
                             <SheetHeader>
-                              <SheetTitle>Detalle de Solicitud</SheetTitle>
+                              <SheetTitle>Detalle de solicitud</SheetTitle>
                               <SheetDescription>
                                 Revisa los datos fiscales proporcionados por el paciente.
                               </SheetDescription>
@@ -246,10 +363,10 @@ export default function RequestsPage() {
                             {selectedRequest && selectedRequest.id === req.id && (
                               <div className="mt-8 space-y-8">
                                 <div className="space-y-4">
-                                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Datos de Facturacion</h3>
+                                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Datos fiscales</h3>
                                   <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
                                     <div className="col-span-2">
-                                      <p className="text-xs text-muted-foreground">Nombre / Razon Social</p>
+                                      <p className="text-xs text-muted-foreground">Nombre / Razon social</p>
                                       <p className="font-bold uppercase">{selectedRequest.legal_name}</p>
                                     </div>
                                     <div>
@@ -261,7 +378,7 @@ export default function RequestsPage() {
                                       <p className="font-bold">{selectedRequest.tax_zip_code}</p>
                                     </div>
                                     <div>
-                                      <p className="text-xs text-muted-foreground">Regimen</p>
+                                      <p className="text-xs text-muted-foreground">Régimen</p>
                                       <p className="font-semibold">{selectedRequest.tax_regime}</p>
                                     </div>
                                     <div>
@@ -269,7 +386,7 @@ export default function RequestsPage() {
                                       <p className="font-semibold">{selectedRequest.cfdi_use}</p>
                                     </div>
                                     <div className="col-span-2">
-                                      <p className="text-xs text-muted-foreground">Correo de recepcion</p>
+                                      <p className="text-xs text-muted-foreground">Correo para recibir factura</p>
                                       <div className="flex items-center gap-2">
                                         <Mail className="w-3 h-3" />
                                         <p className="font-semibold">{selectedRequest.email}</p>
@@ -286,7 +403,7 @@ export default function RequestsPage() {
 
                                 {selectedRequest.sales && (
                                   <div className="space-y-4">
-                                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Referencia de Venta</h3>
+                                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Referencia de venta</h3>
                                     <div className="flex items-center justify-between p-4 bg-primary/5 rounded-2xl border border-primary/10">
                                       <div>
                                         <p className="text-xs text-muted-foreground">Folio</p>
@@ -300,43 +417,115 @@ export default function RequestsPage() {
                                   </div>
                                 )}
 
+                                <div className="space-y-4">
+                                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Constancia fiscal</h3>
+                                  {selectedRequest.invoice_request_csf_documents?.length ? (
+                                    selectedRequest.invoice_request_csf_documents.map((document) => {
+                                      const hasSuggestions = document.extracted_data && Object.keys(document.extracted_data).length > 0
+                                      const statusLabel = document.extraction_status === 'extracted'
+                                        ? 'Datos sugeridos'
+                                        : document.extraction_status === 'failed'
+                                          ? 'No se pudo leer automáticamente'
+                                          : 'Subida'
+
+                                      return (
+                                        <div key={document.id} className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                              <p className="truncate text-sm font-bold">{document.original_filename}</p>
+                                              <p className="text-xs text-muted-foreground">
+                                                {statusLabel} · {(document.file_size / 1024 / 1024).toFixed(2)} MB
+                                              </p>
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              className="shrink-0 rounded-xl"
+                                              onClick={() => handleViewCsfDocument(document.id)}
+                                            >
+                                              <ExternalLink className="mr-2 h-3.5 w-3.5" /> Ver
+                                            </Button>
+                                          </div>
+                                          <p className="text-xs text-muted-foreground">
+                                            La constancia es apoyo documental. Los datos confirmados por el paciente son los usados en la solicitud.
+                                          </p>
+                                          {hasSuggestions && (
+                                            <div className="rounded-xl bg-cyan-50 p-3 text-xs text-cyan-800">
+                                              Datos sugeridos: {Object.entries(document.extracted_data)
+                                                .map(([key, value]) => `${key}: ${String(value)}`)
+                                                .join(', ')}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })
+                                  ) : (
+                                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-muted-foreground dark:border-slate-800 dark:bg-slate-900/50">
+                                      No subida
+                                    </div>
+                                  )}
+                                </div>
+
                                 <div className="space-y-3 pt-4">
-                                  <p className="text-xs font-semibold text-muted-foreground uppercase px-1">Cambiar Estado</p>
+                                  <p className="text-xs font-semibold text-muted-foreground uppercase px-1">Cambiar estado</p>
                                   <div className="grid grid-cols-2 gap-2">
-                                    <Button
-                                      variant="outline"
-                                      className="rounded-xl border-emerald-200 hover:bg-emerald-50 text-emerald-700"
-                                      onClick={() => handleStatusChange(selectedRequest.id, 'ready_to_invoice')}
-                                    >
-                                      <FileCheck className="w-4 h-4 mr-2" /> Marcar Listo
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      className="rounded-xl border-purple-200 hover:bg-purple-50 text-purple-700"
-                                      onClick={() => handleStatusChange(selectedRequest.id, 'sent_to_accountant')}
-                                    >
-                                      <Mail className="w-4 h-4 mr-2" /> Enviar Contador
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      className="rounded-xl border-slate-200 hover:bg-slate-50"
-                                      onClick={() => handleStatusChange(selectedRequest.id, 'issued')}
-                                    >
-                                      <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar Facturado
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      className="rounded-xl border-red-100 hover:bg-red-50 text-red-600"
-                                      onClick={() => handleStatusChange(selectedRequest.id, 'rejected', 'Datos incorrectos')}
-                                    >
-                                      <XCircle className="w-4 h-4 mr-2" /> Rechazar
-                                    </Button>
+                                    {getAvailableStatusActions(selectedRequest.status).canMarkReady && (
+                                      <Button
+                                        variant="outline"
+                                        className="rounded-xl border-emerald-200 hover:bg-emerald-50 text-emerald-700"
+                                        onClick={() => handleStatusChange(selectedRequest.id, 'ready_to_invoice')}
+                                      >
+                                        <FileCheck className="w-4 h-4 mr-2" /> Marcar lista
+                                      </Button>
+                                    )}
+                                    {getAvailableStatusActions(selectedRequest.status).canSendAccountant && (
+                                      <Button
+                                        variant="outline"
+                                        className="rounded-xl border-purple-200 hover:bg-purple-50 text-purple-700"
+                                        onClick={() => handleStatusChange(selectedRequest.id, 'sent_to_accountant')}
+                                      >
+                                        <Mail className="w-4 h-4 mr-2" /> Enviar al contador
+                                      </Button>
+                                    )}
+                                    {getAvailableStatusActions(selectedRequest.status).canReopen && (
+                                      <Button
+                                        variant="outline"
+                                        className="rounded-xl border-blue-200 hover:bg-blue-50 text-blue-700"
+                                        onClick={() => handleStatusChange(selectedRequest.id, 'fiscal_data_received')}
+                                      >
+                                        <Clock className="w-4 h-4 mr-2" /> Reabrir
+                                      </Button>
+                                    )}
+                                    {getAvailableStatusActions(selectedRequest.status).canReject && (
+                                      <Button
+                                        variant="outline"
+                                        className="rounded-xl border-red-100 hover:bg-red-50 text-red-600"
+                                        onClick={() => handleStatusChange(selectedRequest.id, 'rejected', 'Datos incorrectos')}
+                                      >
+                                        <XCircle className="w-4 h-4 mr-2" /> Rechazar
+                                      </Button>
+                                    )}
+                                    {getAvailableStatusActions(selectedRequest.status).canCancel && (
+                                      <Button
+                                        variant="outline"
+                                        className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700"
+                                        onClick={() => handleStatusChange(selectedRequest.id, 'cancelled')}
+                                      >
+                                        <XCircle className="w-4 h-4 mr-2" /> Cancelar
+                                      </Button>
+                                    )}
                                   </div>
                                 </div>
 
-                                {selectedRequest.status === 'issued' && (
+                                {['ready_to_invoice', 'sent_to_accountant'].includes(selectedRequest.status) && (
                                   <div className="space-y-3">
-                                    <Label>UUID de Factura</Label>
+                                    <div className="space-y-1">
+                                      <Label>Capturar UUID y marcar como emitida</Label>
+                                      <p className="text-xs text-muted-foreground">
+                                        Después de emitir la factura en tu sistema fiscal, captura el UUID para cerrar la solicitud.
+                                      </p>
+                                    </div>
                                     <div className="flex gap-2">
                                       <Input
                                         value={uuidInput}
@@ -344,7 +533,16 @@ export default function RequestsPage() {
                                         placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
                                         className="rounded-xl font-mono text-xs"
                                       />
-                                      <Button size="sm" className="rounded-xl" onClick={handleAssignUuid}>Guardar</Button>
+                                      <Button size="sm" className="rounded-xl" onClick={handleAssignUuid}>Guardar UUID</Button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {selectedRequest.status === 'issued' && (
+                                  <div className="space-y-2">
+                                    <Label>UUID de factura emitida</Label>
+                                    <div className="rounded-xl border bg-slate-50 dark:bg-slate-900 px-3 py-2 font-mono text-xs">
+                                      {selectedRequest.uuid || 'Sin UUID registrado'}
                                     </div>
                                   </div>
                                 )}

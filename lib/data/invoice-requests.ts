@@ -7,7 +7,7 @@ export async function getInvoiceRequestsForProfile(profile: Profile | null) {
 
   let query = supabase
     .from('invoice_requests')
-    .select('*, sales(folio, service_name, amount)')
+    .select('*, sales!invoice_requests_sale_id_fkey(folio, service_name, amount)')
     .order('created_at', { ascending: false })
 
   if (profile.role !== 'superadmin') {
@@ -34,7 +34,7 @@ export async function getInvoiceRequestById(id: string) {
   const supabase = await createClient()
   const { data } = await supabase
     .from('invoice_requests')
-    .select('*, sales(folio, service_name, amount)')
+    .select('*, sales!invoice_requests_sale_id_fkey(folio, service_name, amount)')
     .eq('id', id)
     .single()
   return data

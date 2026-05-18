@@ -289,4 +289,4 @@ BEGIN
   VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name', user_role_val);
   RETURN new;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;

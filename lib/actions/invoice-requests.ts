@@ -31,8 +31,8 @@ export async function createInvoiceRequestAction(_input: unknown) {
 const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
   fiscal_data_received: ['ready_to_invoice', 'sent_to_accountant', 'rejected', 'cancelled'],
   fiscal_data_pending:  ['fiscal_data_received', 'rejected', 'cancelled'],
-  ready_to_invoice:     ['sent_to_accountant', 'issued', 'rejected', 'cancelled'],
-  sent_to_accountant:   ['issued', 'rejected', 'cancelled'],
+  ready_to_invoice:     ['sent_to_accountant', 'rejected', 'cancelled'],
+  sent_to_accountant:   ['rejected', 'cancelled'],
   issued:               [],  // estado final — no se puede cambiar desde aquí
   rejected:             ['fiscal_data_received'],  // permite reintento
   cancelled:            [],  // estado final
@@ -52,6 +52,10 @@ export async function updateInvoiceRequestStatusAction(
 
   if (!requestId || !newStatus) {
     return { error: 'Parametros invalidos' }
+  }
+
+  if (newStatus === 'issued') {
+    return { error: 'Para marcar como facturado debes asignar el UUID de la factura' }
   }
 
   const supabase = await createClient()

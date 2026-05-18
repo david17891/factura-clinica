@@ -1,5 +1,6 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- 1. ENUMS
 CREATE TYPE user_role AS ENUM ('superadmin', 'clinic_admin', 'reception', 'accountant');

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -64,19 +65,20 @@ export default function ClinicQrPage() {
   }
 
   if (loading) {
-    return <div className="space-y-6"><div className="text-center py-12 text-muted-foreground">Cargando informacion de la clinica...</div></div>
+    return <div className="space-y-6"><div className="text-center py-12 text-muted-foreground">Cargando información de la clínica...</div></div>
   }
 
   if (!clinicSlug) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">QR de la Clinica</h1>
-          <p className="text-muted-foreground">Tu link permanente para que cualquier paciente solicite factura.</p>
+          <h1 className="text-3xl font-bold tracking-tight">QR fijo de recepción</h1>
+          <p className="text-muted-foreground">Link permanente para recibir solicitudes de factura.</p>
         </div>
         <Card className="border-none shadow-xl glass overflow-hidden">
           <CardContent className="p-8 text-center">
-            <p className="text-muted-foreground">No tienes una clinica asignada. Contacta al administrador.</p>
+            <p className="font-semibold">No tienes una clínica asignada</p>
+            <p className="mt-1 text-sm text-muted-foreground">Solicita a un administrador que revise tu perfil.</p>
           </CardContent>
         </Card>
       </div>
@@ -86,8 +88,8 @@ export default function ClinicQrPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">QR de la Clinica</h1>
-        <p className="text-muted-foreground">Tu link permanente para que cualquier paciente solicite factura.</p>
+        <h1 className="text-3xl font-bold tracking-tight">QR fijo de recepción</h1>
+        <p className="text-muted-foreground">Usa este QR cuando no quieras registrar cada venta en el sistema.</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-[1fr_350px]">
@@ -96,12 +98,12 @@ export default function ClinicQrPage() {
             <CardHeader>
               <CardTitle>{clinicName}</CardTitle>
               <CardDescription>
-                Este QR es ideal para tenerlo impreso en la recepcion o en un acrilico sobre el mostrador.
+                Este QR es ideal para tenerlo impreso en recepción o en un acrílico sobre el mostrador.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-3">
-                <p className="text-sm font-medium">Link Publico:</p>
+                <p className="text-sm font-medium">Link publico:</p>
                 <div className="flex gap-2">
                   <div className="flex-1 bg-white dark:bg-slate-900 px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-800 font-mono truncate">
                     {publicLink}
@@ -117,24 +119,24 @@ export default function ClinicQrPage() {
                   <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
                     <Info className="w-4 h-4" />
                   </div>
-                  <p className="font-semibold text-sm">Autogestion</p>
-                  <p className="text-xs text-muted-foreground">El paciente ingresa el monto y servicio manualmente.</p>
+                  <p className="font-semibold text-sm">Datos del pago</p>
+                  <p className="text-xs text-muted-foreground">El paciente ingresa monto y servicio porque no hay venta registrada.</p>
                 </div>
                 <div className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
                   <div className="w-8 h-8 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
                     <QrCode className="w-4 h-4" />
                   </div>
-                  <p className="font-semibold text-sm">Siempre Activo</p>
+                  <p className="font-semibold text-sm">Siempre activo</p>
                   <p className="text-xs text-muted-foreground">No expira y puede ser escaneado por multiples pacientes.</p>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-3 pt-4">
                 <Button variant="outline" className="rounded-xl" onClick={() => window.open(publicLink, '_blank')}>
-                  <ExternalLink className="w-4 h-4 mr-2" /> Probar Formulario
+                  <ExternalLink className="w-4 h-4 mr-2" /> Ver formulario
                 </Button>
                 <Button variant="outline" className="rounded-xl" onClick={handleWhatsApp}>
-                  <QrCode className="w-4 h-4 mr-2" /> WhatsApp Generico
+                  <QrCode className="w-4 h-4 mr-2" /> Enviar por WhatsApp
                 </Button>
               </div>
             </CardContent>
@@ -142,19 +144,23 @@ export default function ClinicQrPage() {
 
           <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden">
             <CardContent className="p-8 text-center space-y-4">
-              <h3 className="text-xl font-bold">Necesitas algo mas automatico?</h3>
+              <h3 className="text-xl font-bold">Quieres ligar la solicitud a una venta?</h3>
               <p className="text-slate-400 text-sm">
-                Usa el <strong>QR por Venta</strong> en la seccion de Ventas para que el paciente solo tenga que llenar sus datos fiscales.
+                Usa el <strong>QR por venta</strong> en Ventas para que el paciente solo llene sus datos fiscales.
               </p>
-              <Button variant="secondary" className="rounded-xl">
-                <a href="/dashboard/sales">Ir a Ventas</a>
+              <Button asChild variant="secondary" className="rounded-xl">
+                <Link href="/dashboard/sales">Ir a ventas</Link>
               </Button>
             </CardContent>
           </Card>
         </div>
 
         <Card className="border-none shadow-2xl glass text-center flex flex-col items-center justify-center p-8 h-fit sticky top-24">
-          <p className="text-sm font-bold text-primary mb-6 tracking-widest uppercase">QR Permanente</p>
+          <p className="text-sm font-bold text-primary mb-6 tracking-widest uppercase">Cartel de recepción</p>
+          <div className="mb-6 space-y-2">
+            <h2 className="text-2xl font-black tracking-tight">Requieres factura?</h2>
+            <p className="text-sm text-muted-foreground">Escanea este QR y llena tus datos fiscales</p>
+          </div>
           <div className="p-6 bg-white rounded-[2.5rem] shadow-2xl border-4 border-primary/20">
             <QRCodeSVG
               value={publicLink}
@@ -165,7 +171,7 @@ export default function ClinicQrPage() {
           </div>
           <div className="mt-8 space-y-2">
             <p className="font-bold text-lg leading-tight">{clinicName}</p>
-            <p className="text-xs text-muted-foreground">Escanea para facturar</p>
+            <p className="text-xs text-muted-foreground">Tus datos deben coincidir con tu Constancia de Situación Fiscal</p>
           </div>
           <Button variant="ghost" size="sm" className="mt-8 rounded-full text-muted-foreground hover:text-primary" onClick={handleCopy}>
             <Copy className="w-3 h-3 mr-2" /> Copiar URL

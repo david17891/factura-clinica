@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FiscoBot — Control de Facturación para Clínicas",
-  description: "Sistema administrativo para clínicas pequeñas en México. Organiza pagos, solicitudes de factura y exportación para contador.",
+  title: "Factura Clínica - Portal fiscal para clínicas",
+  description: "Portal administrativo para clínicas pequeñas en México. Organiza solicitudes de factura con QR, WhatsApp y exportación para contador.",
 };
 
 export default function RootLayout({
