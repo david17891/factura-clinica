@@ -405,7 +405,7 @@ export default function RequestsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Solicitudes de factura</h1>
           <p className="text-muted-foreground">Revisa datos fiscales, prepara facturas y cierra solicitudes con UUID.</p>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Descarga un CSV con los datos fiscales y de venta para apoyar la emision de facturas.
+            Descarga un CSV con los datos fiscales y de venta para apoyar la emisión de facturas.
           </p>
         </div>
         {canExportRequests && (
@@ -491,7 +491,7 @@ export default function RequestsPage() {
                                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Datos fiscales</h3>
                                   <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
                                     <div className="col-span-2">
-                                      <p className="text-xs text-muted-foreground">Nombre / Razon social</p>
+                                      <p className="text-xs text-muted-foreground">Nombre / Razón social</p>
                                       <p className="font-bold uppercase">{selectedRequest.legal_name}</p>
                                     </div>
                                     <div>
@@ -604,28 +604,30 @@ export default function RequestsPage() {
 
                                 {selectedRequest.status === 'rejected' && (
                                   <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                                    <div className="space-y-1">
+                                    <div className="space-y-1.5">
                                       <p className="font-semibold">Solicitud requiere corrección</p>
-                                      <p className="text-amber-800">
+                                      <p className="rounded-xl border border-amber-200 bg-white/70 p-3 text-xs font-medium text-amber-950 break-words whitespace-pre-wrap">
                                         {selectedRequest.correction_message || selectedRequest.rejection_reason || 'No hay motivo registrado.'}
                                       </p>
                                     </div>
-                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                    <div className="flex flex-col gap-2 w-full">
                                       <Button
                                         type="button"
                                         variant="outline"
-                                        className="rounded-xl border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+                                        className="w-full justify-start rounded-xl border-amber-300 bg-white text-amber-900 hover:bg-amber-100 py-2.5 h-auto whitespace-normal text-left"
                                         onClick={() => copyCorrectionMessage(selectedRequest)}
                                       >
-                                        <MessageCircle className="mr-2 h-4 w-4" /> Copiar mensaje para paciente
+                                        <MessageCircle className="mr-2.5 h-4 w-4 shrink-0 text-amber-700" />
+                                        <span className="break-words">Copiar mensaje para paciente</span>
                                       </Button>
                                       <Button
                                         type="button"
                                         variant="outline"
-                                        className="rounded-xl border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
+                                        className="w-full justify-start rounded-xl border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50 py-2.5 h-auto whitespace-normal text-left"
                                         onClick={() => openCorrectionWhatsApp(selectedRequest)}
                                       >
-                                        <MessageCircle className="mr-2 h-4 w-4" /> Abrir WhatsApp
+                                        <MessageCircle className="mr-2.5 h-4 w-4 shrink-0 text-emerald-600" />
+                                        <span className="break-words">Abrir WhatsApp</span>
                                       </Button>
                                     </div>
                                   </div>
@@ -634,53 +636,58 @@ export default function RequestsPage() {
                                 {canManageRequests && (
                                   <div className="space-y-3 pt-4">
                                     <p className="text-xs font-semibold text-muted-foreground uppercase px-1">Acciones contables</p>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="flex flex-col gap-2 w-full">
                                       {getAvailableStatusActions(selectedRequest.status).canMarkReview && (
                                         <Button
                                           variant="outline"
-                                          className="rounded-xl border-purple-200 hover:bg-purple-50 text-purple-700"
+                                          className="w-full justify-start rounded-xl border-purple-200 hover:bg-purple-50 text-purple-700 py-2.5 h-auto whitespace-normal text-left"
                                           onClick={() => handleStatusChange(selectedRequest.id, 'sent_to_accountant')}
                                         >
-                                          <FileCheck className="w-4 h-4 mr-2" /> Marcar en revisión
+                                          <FileCheck className="w-4 h-4 mr-2.5 shrink-0" />
+                                          <span className="break-words">Marcar en revisión</span>
                                         </Button>
                                       )}
                                       {getAvailableStatusActions(selectedRequest.status).canMarkReady && (
                                         <Button
                                           variant="outline"
-                                          className="rounded-xl border-emerald-200 hover:bg-emerald-50 text-emerald-700"
+                                          className="w-full justify-start rounded-xl border-emerald-200 hover:bg-emerald-50 text-emerald-700 py-2.5 h-auto whitespace-normal text-left"
                                           onClick={() => handleStatusChange(selectedRequest.id, 'ready_to_invoice')}
                                         >
-                                          <FileCheck className="w-4 h-4 mr-2" /> Lista para facturar
+                                          <FileCheck className="w-4 h-4 mr-2.5 shrink-0" />
+                                          <span className="break-words">Lista para facturar</span>
                                         </Button>
                                       )}
                                       {getAvailableStatusActions(selectedRequest.status).canReopen && (
                                         <Button
                                           variant="outline"
-                                          className="rounded-xl border-blue-200 hover:bg-blue-50 text-blue-700"
+                                          className="w-full justify-start rounded-xl border-blue-200 hover:bg-blue-50 text-blue-700 py-2.5 h-auto whitespace-normal text-left"
                                           onClick={() => handleStatusChange(selectedRequest.id, 'fiscal_data_received')}
                                         >
-                                          <Clock className="w-4 h-4 mr-2" /> Marcar recibida
+                                          <Clock className="w-4 h-4 mr-2.5 shrink-0" />
+                                          <span className="break-words">Marcar recibida</span>
                                         </Button>
                                       )}
                                       {getAvailableStatusActions(selectedRequest.status).canReject && (
                                         <Button
                                           variant="outline"
-                                          className="rounded-xl border-red-100 hover:bg-red-50 text-red-600"
+                                          className="w-full justify-start rounded-xl border-red-100 hover:bg-red-50 text-red-600 py-2.5 h-auto whitespace-normal text-left"
                                           onClick={() => {
                                             setIsCorrectionFormOpen(true)
                                             setCorrectionMessageError(null)
                                           }}
                                         >
-                                          <XCircle className="w-4 h-4 mr-2" /> Requiere corrección
+                                          <XCircle className="w-4 h-4 mr-2.5 shrink-0" />
+                                          <span className="break-words">Requiere corrección</span>
                                         </Button>
                                       )}
                                       {getAvailableStatusActions(selectedRequest.status).canCancel && (
                                         <Button
                                           variant="outline"
-                                          className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700"
+                                          className="w-full justify-start rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700 py-2.5 h-auto whitespace-normal text-left"
                                           onClick={() => handleStatusChange(selectedRequest.id, 'cancelled')}
                                         >
-                                          <XCircle className="w-4 h-4 mr-2" /> Cancelar / No facturable
+                                          <XCircle className="w-4 h-4 mr-2.5 shrink-0" />
+                                          <span className="break-words">Cancelar / No facturable</span>
                                         </Button>
                                       )}
                                     </div>
@@ -705,11 +712,11 @@ export default function RequestsPage() {
                                         {correctionMessageError && (
                                           <p className="text-xs font-medium text-red-700">{correctionMessageError}</p>
                                         )}
-                                        <div className="flex flex-col gap-2 sm:flex-row">
+                                        <div className="grid grid-cols-2 gap-2 w-full">
                                           <Button
                                             type="button"
                                             variant="outline"
-                                            className="rounded-xl bg-white"
+                                            className="rounded-xl bg-white w-full"
                                             onClick={() => {
                                               setIsCorrectionFormOpen(false)
                                               setCorrectionMessageInput('')
@@ -718,8 +725,8 @@ export default function RequestsPage() {
                                           >
                                             Cancelar
                                           </Button>
-                                          <Button type="button" className="rounded-xl" onClick={handleRequestCorrection}>
-                                            Confirmar corrección
+                                          <Button type="button" className="rounded-xl w-full" onClick={handleRequestCorrection}>
+                                            Confirmar
                                           </Button>
                                         </div>
                                       </div>
@@ -757,8 +764,8 @@ export default function RequestsPage() {
                                 )}
 
                                 {!canManageRequests && (
-                                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
-                                    Solo administradores y contadores pueden cambiar el estado de las solicitudes.
+                                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-xs text-slate-500 break-words dark:border-slate-800 dark:bg-slate-900/50">
+                                    Nota: Solo administradores y contadores pueden cambiar el estado de las solicitudes.
                                   </div>
                                 )}
                               </div>
