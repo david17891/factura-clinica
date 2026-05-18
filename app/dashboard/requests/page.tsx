@@ -486,7 +486,7 @@ export default function RequestsPage() {
                             </SheetHeader>
 
                             {selectedRequest && selectedRequest.id === req.id && (
-                              <div className="mt-8 space-y-8">
+                              <div className="mt-8 space-y-8 pb-20">
                                 <div className="space-y-4">
                                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Datos fiscales</h3>
                                   <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
