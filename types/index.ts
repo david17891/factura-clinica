@@ -90,6 +90,27 @@ export interface InvoiceDocument {
 
 export type CsfExtractionStatus = 'not_attempted' | 'extracted' | 'failed' | 'manual_review';
 
+export type CsfExtractionSource = 'pdf_text' | 'qr' | 'ocr' | 'manual';
+
+export type CsfConfidence = 'high' | 'medium' | 'low';
+
+export interface CsfExtractedData {
+  rfc?: string;
+  legalName?: string;
+  taxZipCode?: string;
+  taxRegime?: string;
+  qrRawValue?: string;
+  source?: CsfExtractionSource;
+  confidence?: CsfConfidence;
+  warnings?: string[];
+}
+
+export interface CsfExtractionResult {
+  status: CsfExtractionStatus;
+  message: string;
+  data: CsfExtractedData;
+}
+
 export interface InvoiceRequestCsfDocument {
   id: string;
   invoice_request_id: string;
@@ -99,6 +120,6 @@ export interface InvoiceRequestCsfDocument {
   mime_type: string;
   file_size: number;
   extraction_status: CsfExtractionStatus;
-  extracted_data: Record<string, unknown>;
+  extracted_data: CsfExtractedData & Record<string, unknown>;
   created_at: string;
 }

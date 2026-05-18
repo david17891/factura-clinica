@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -26,23 +26,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { AlertCircle, CheckCircle2, FileText, Loader2, Upload, User, WalletCards } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Sale, Clinic } from '@/types'
-
-type CsfExtractionStatus = 'not_attempted' | 'extracted' | 'failed' | 'manual_review'
-
-interface CsfExtractionResult {
-  status: CsfExtractionStatus
-  message: string
-  data: Record<string, string>
-}
-
-interface BarcodeDetectorLike {
-  detect(source: ImageBitmapSource): Promise<Array<{ rawValue?: string }>>
-}
-
-interface BarcodeDetectorConstructorLike {
-  new (options?: { formats?: string[] }): BarcodeDetectorLike
-}
+import { extractFiscalDataFromFile } from '@/lib/csf/extract-client'
+import { Sale, Clinic, CsfExtractionResult, CsfExtractedData } from '@/types'
 
 const MAX_CSF_FILE_SIZE = 10 * 1024 * 1024
 const CSF_BUCKET = 'csf-documents'
@@ -86,92 +71,21 @@ function getSafeExtension(file: File) {
   return null
 }
 
-function parseFiscalDataFromText(text: string) {
-  const data: Record<string, string> = {}
-  const normalized = text.toUpperCase()
-
-  try {
-    const url = new URL(text)
-    const d3 = url.searchParams.get('D3')?.toUpperCase()
-    if (d3 && /^[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}$/.test(d3)) {
-      data.rfc = d3
-    }
-  } catch {
-    // SAT QR content may be plain text or a partial URL.
-  }
-
-  const rfc = normalized.match(/[A-Z&Ñ]{3,4}[0-9]{6}[A-Z0-9]{3}/)?.[0]
-  if (rfc) data.rfc = rfc
-
-  const zip = normalized.match(/(?:CP|C\.P\.|CODIGO POSTAL|CÓDIGO POSTAL)[^\d]{0,10}(\d{5})/)?.[1]
-  if (zip) data.taxZipCode = zip
-
-  return data
+function getDetectedLabel(fieldName: keyof CsfExtractedData, data: CsfExtractedData) {
+  return data[fieldName] ? (
+    <span className="ml-2 rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-700">
+      Detectado
+    </span>
+  ) : null
 }
-
-async function extractCsfData(file: File): Promise<CsfExtractionResult> {
-  if (file.type === 'application/pdf') {
-    return {
-      status: 'manual_review',
-      message: 'El PDF quedó adjunto para revisión. Puedes capturar o confirmar los datos manualmente.',
-      data: {},
-    }
-  }
-
-  if (!file.type.startsWith('image/')) {
-    return {
-      status: 'failed',
-      message: 'No pudimos leer los datos automáticamente. Puedes capturarlos manualmente.',
-      data: {},
-    }
-  }
-
-  const BarcodeDetectorCtor = (window as Window & { BarcodeDetector?: BarcodeDetectorConstructorLike }).BarcodeDetector
-  if (!BarcodeDetectorCtor) {
-    return {
-      status: 'manual_review',
-      message: 'Tu navegador no permite leer QR automáticamente. El archivo quedará adjunto para revisión.',
-      data: {},
-    }
-  }
-
-  try {
-    const bitmap = await createImageBitmap(file)
-    const detector = new BarcodeDetectorCtor({ formats: ['qr_code'] })
-    const codes = await detector.detect(bitmap)
-    bitmap.close()
-    const rawValue = codes.find((code) => code.rawValue)?.rawValue
-    if (!rawValue) {
-      return {
-        status: 'failed',
-        message: 'No pudimos leer el QR automáticamente. Puedes capturar los datos manualmente.',
-        data: {},
-      }
-    }
-
-    const data = parseFiscalDataFromText(rawValue)
-    return {
-      status: Object.keys(data).length > 0 ? 'extracted' : 'manual_review',
-      message: Object.keys(data).length > 0
-        ? 'Encontramos datos sugeridos. Revisa y confirma antes de enviar.'
-        : 'Leímos el QR, pero no encontramos datos suficientes. Captura o confirma los datos manualmente.',
-      data,
-    }
-  } catch {
-    return {
-      status: 'failed',
-      message: 'No pudimos leer los datos automáticamente. Puedes capturarlos manualmente.',
-      data: {},
-    }
-  }
-}
-
 export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [csfFile, setCsfFile] = useState<File | null>(null)
+  const [isReadingCsf, setIsReadingCsf] = useState(false)
   const [csfUploadWarning, setCsfUploadWarning] = useState<string | null>(null)
+  const csfExtractionRunRef = useRef(0)
   const [csfExtraction, setCsfExtraction] = useState<CsfExtractionResult>({
     status: 'not_attempted',
     message: '',
@@ -198,10 +112,13 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
   })
 
   async function handleCsfFileChange(file: File | null) {
+    const extractionRun = csfExtractionRunRef.current + 1
+    csfExtractionRunRef.current = extractionRun
     setError(null)
     setCsfUploadWarning(null)
     setCsfFile(null)
     setCsfExtraction({ status: 'not_attempted', message: '', data: {} })
+    setIsReadingCsf(false)
 
     if (!file) return
 
@@ -217,11 +134,38 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
     }
 
     setCsfFile(file)
-    const result = await extractCsfData(file)
+    setIsReadingCsf(true)
+    let result: CsfExtractionResult
+    try {
+      result = await extractFiscalDataFromFile(file)
+    } catch {
+      result = {
+        status: 'manual_review',
+        message: 'No pudimos leerlo automáticamente. Puedes capturarlo manualmente.',
+        data: { source: 'manual', confidence: 'low' },
+      }
+    } finally {
+      if (csfExtractionRunRef.current === extractionRun) {
+        setIsReadingCsf(false)
+      }
+    }
+
+    if (csfExtractionRunRef.current !== extractionRun) return
+
     setCsfExtraction(result)
 
-    if (result.data.rfc) form.setValue('rfc', result.data.rfc, { shouldValidate: true })
-    if (result.data.taxZipCode) form.setValue('taxZipCode', result.data.taxZipCode, { shouldValidate: true })
+    const applyDetectedValue = (fieldName: 'rfc' | 'legalName' | 'taxZipCode' | 'taxRegime', value?: string) => {
+      if (!value) return
+      const currentValue = form.getValues(fieldName)
+      const fieldState = form.getFieldState(fieldName)
+      if (currentValue && fieldState.isDirty) return
+      form.setValue(fieldName, value, { shouldValidate: true, shouldDirty: false })
+    }
+
+    applyDetectedValue('rfc', result.data.rfc)
+    applyDetectedValue('legalName', result.data.legalName)
+    applyDetectedValue('taxZipCode', result.data.taxZipCode)
+    applyDetectedValue('taxRegime', result.data.taxRegime)
   }
 
   async function attachCsfDocument(supabase: ReturnType<typeof createClient>, requestId: string) {
@@ -504,10 +448,10 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5 text-primary" />
-              Constancia de Situación Fiscal
+              Sube tu constancia o escanea el QR
             </CardTitle>
             <CardDescription>
-              Puedes subir tu constancia para ayudar a prellenar tus datos. Revisa y confirma antes de enviar.
+              Puedes subir tu Constancia, CIF o Cédula de Datos Fiscales para prellenar tus datos. No consultamos SAT ni servicios externos.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -519,7 +463,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
                 onChange={(event) => handleCsfFileChange(event.target.files?.[0] ?? null)}
               />
               <p className="mt-2 text-xs text-muted-foreground">
-                Formatos permitidos: PDF, JPG, PNG o HEIC. Tamaño máximo: 10 MB.
+                Formatos permitidos: PDF, JPG, PNG o HEIC. Tamaño máximo: 10 MB. Los datos detectados siempre se pueden editar.
               </p>
             </div>
 
@@ -527,19 +471,31 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <p className="text-sm font-semibold text-slate-900">{csfFile.name}</p>
                 <p className="text-xs text-muted-foreground">{(csfFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                {csfExtraction.message && (
+                {isReadingCsf && (
+                  <div className="mt-3 flex items-center gap-2 rounded-xl bg-cyan-50 p-3 text-sm text-cyan-800">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Leyendo documento...
+                  </div>
+                )}
+                {!isReadingCsf && csfExtraction.message && (
                   <p className="mt-3 text-sm text-muted-foreground">{csfExtraction.message}</p>
                 )}
-                {Object.keys(csfExtraction.data).length > 0 && (
-                  <div className="mt-3 rounded-xl bg-cyan-50 p-3 text-sm text-cyan-800">
-                    Datos sugeridos aplicados al formulario. Confírmalos antes de enviar.
+                {!isReadingCsf && Object.keys(csfExtraction.data).length > 0 && (
+                  <div className="mt-3 space-y-2 rounded-xl bg-cyan-50 p-3 text-sm text-cyan-800">
+                    <p className="font-semibold">Datos detectados</p>
+                    <div className="grid gap-1 text-xs">
+                      {csfExtraction.data.rfc && <span>RFC: {csfExtraction.data.rfc}</span>}
+                      {csfExtraction.data.legalName && <span>Nombre/Razón social: {csfExtraction.data.legalName}</span>}
+                      {csfExtraction.data.taxZipCode && <span>C.P. fiscal: {csfExtraction.data.taxZipCode}</span>}
+                      {csfExtraction.data.taxRegime && <span>Régimen: {csfExtraction.data.taxRegime}</span>}
+                    </div>
+                    <p className="text-xs">Revisa antes de enviar. Estos campos siguen siendo editables.</p>
                   </div>
                 )}
               </div>
             )}
           </CardContent>
         </Card>
-
         <Card className="glass border-primary/20">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -558,7 +514,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
                   name="rfc"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>RFC</FormLabel>
+                      <FormLabel>RFC{getDetectedLabel('rfc', csfExtraction.data)}</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="XAXX010101000"
@@ -577,7 +533,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
                   name="taxZipCode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Código postal fiscal</FormLabel>
+                      <FormLabel>Código postal fiscal{getDetectedLabel('taxZipCode', csfExtraction.data)}</FormLabel>
                       <FormControl>
                         <Input placeholder="00000" maxLength={5} {...field} className="rounded-xl" />
                       </FormControl>
@@ -591,7 +547,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
                   name="legalName"
                   render={({ field }) => (
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Nombre o razón social</FormLabel>
+                      <FormLabel>Nombre o razón social{getDetectedLabel('legalName', csfExtraction.data)}</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="Como aparece en el SAT"
@@ -610,7 +566,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
                   name="taxRegime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Régimen fiscal</FormLabel>
+                      <FormLabel>Régimen fiscal{getDetectedLabel('taxRegime', csfExtraction.data)}</FormLabel>
                       <Select value={field.value} onValueChange={field.onChange}>
                         <FormControl>
                           <SelectTrigger className="rounded-xl">

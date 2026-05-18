@@ -39,6 +39,7 @@ import Papa from 'papaparse'
 import { updateInvoiceRequestStatusAction, assignUuidAction } from '@/lib/actions/invoice-requests'
 import { exportRequestsCsvAction } from '@/lib/actions/exports'
 import { createCsfDocumentSignedUrlAction } from '@/lib/actions/csf-documents'
+import type { CsfExtractedData } from '@/types'
 
 interface CsfDocumentRow {
   id: string
@@ -46,7 +47,7 @@ interface CsfDocumentRow {
   mime_type: string
   file_size: number
   extraction_status: string
-  extracted_data: Record<string, unknown>
+  extracted_data: CsfExtractedData & Record<string, unknown>
   created_at: string
 }
 
@@ -86,6 +87,17 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
 }
 
 const requestsSelect = '*, sales!invoice_requests_sale_id_fkey(folio, service_name, amount, created_at), invoice_request_csf_documents(id, original_filename, mime_type, file_size, extraction_status, extracted_data, created_at)'
+
+function getCsfSuggestionRows(data: CsfExtractedData & Record<string, unknown>) {
+  return [
+    ['RFC', data.rfc],
+    ['Nombre/Razón social', data.legalName],
+    ['C.P. fiscal', data.taxZipCode],
+    ['Régimen', data.taxRegime],
+    ['Fuente', data.source],
+    ['Confianza', data.confidence],
+  ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
+}
 
 export default function RequestsPage() {
   const [requests, setRequests] = useState<RequestRow[]>([])
@@ -422,6 +434,7 @@ export default function RequestsPage() {
                                   {selectedRequest.invoice_request_csf_documents?.length ? (
                                     selectedRequest.invoice_request_csf_documents.map((document) => {
                                       const hasSuggestions = document.extracted_data && Object.keys(document.extracted_data).length > 0
+                                      const suggestionRows = getCsfSuggestionRows(document.extracted_data)
                                       const statusLabel = document.extraction_status === 'extracted'
                                         ? 'Datos sugeridos'
                                         : document.extraction_status === 'failed'
@@ -451,10 +464,19 @@ export default function RequestsPage() {
                                             La constancia es apoyo documental. Los datos confirmados por el paciente son los usados en la solicitud.
                                           </p>
                                           {hasSuggestions && (
-                                            <div className="rounded-xl bg-cyan-50 p-3 text-xs text-cyan-800">
-                                              Datos sugeridos: {Object.entries(document.extracted_data)
-                                                .map(([key, value]) => `${key}: ${String(value)}`)
-                                                .join(', ')}
+                                            <div className="space-y-2 rounded-xl bg-cyan-50 p-3 text-xs text-cyan-800">
+                                              <p className="font-semibold">Datos sugeridos por constancia</p>
+                                              {suggestionRows.length ? (
+                                                <div className="grid gap-1 sm:grid-cols-2">
+                                                  {suggestionRows.map(([label, value]) => (
+                                                    <div key={label}>
+                                                      <span className="font-medium">{label}:</span> {value}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <p>Hay datos técnicos de extracción, pero ningún campo fiscal confiable para mostrar.</p>
+                                              )}
                                             </div>
                                           )}
                                         </div>
