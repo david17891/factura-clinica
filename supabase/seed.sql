@@ -1,0 +1,15 @@
+-- FiscoBot local-only seed.
+-- Demo app data currently lives in migrations/20260515000002_seed_data.sql so
+-- `supabase db reset` can rebuild the MVP state from migrations alone.
+--
+-- Demo Auth users are intentionally not inserted here because Supabase Auth's
+-- internal table shape can change between CLI releases. Create them locally via
+-- Supabase Studio (http://127.0.0.1:54323) using:
+--
+--   admin@dentalrio.test      / Demo123456!
+--   recepcion@dentalrio.test  / Demo123456!
+--   contador@dentalrio.test   / Demo123456!
+--
+-- Preferred workflow:
+--
+--   npm run seed:local-users
