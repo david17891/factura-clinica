@@ -77,6 +77,8 @@ const statusMap: Record<string, { label: string; variant: 'outline' | 'secondary
   cancelled: { label: 'Cancelada', variant: 'outline' },
 }
 
+type UserRole = 'superadmin' | 'clinic_admin' | 'reception' | 'accountant'
+
 export default function SalesPage() {
   const [sales, setSales] = useState<SaleRow[]>([])
   const [clinicSlug, setClinicSlug] = useState<string>('')
@@ -86,6 +88,7 @@ export default function SalesPage() {
   const [isQrOpen, setIsQrOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [role, setRole] = useState<UserRole>('reception')
   const [emptyState, setEmptyState] = useState({
     title: 'Aun no hay ventas registradas',
     description: 'Crea una venta para generar un QR o link fiscal.',
@@ -100,6 +103,10 @@ export default function SalesPage() {
         .select('clinic_id, role')
         .eq('id', (await supabase.auth.getUser()).data.user?.id)
         .single()
+
+      if (profile?.role) {
+        setRole(profile.role as UserRole)
+      }
 
       if (profile?.clinic_id) {
         const { data: clinic } = await supabase
@@ -232,12 +239,13 @@ export default function SalesPage() {
             Después de cobrar, recepción puede registrar la venta y compartir un link seguro para que el paciente complete sus datos fiscales.
           </p>
         </div>
-        <Dialog open={isAddingSale} onOpenChange={setIsAddingSale}>
-          <Button asChild className="rounded-xl shadow-lg shadow-primary/10">
-            <DialogTrigger>
-              <Plus className="w-4 h-4 mr-2" /> Nueva venta
-            </DialogTrigger>
-          </Button>
+        {role !== 'accountant' && (
+          <Dialog open={isAddingSale} onOpenChange={setIsAddingSale}>
+            <Button asChild className="rounded-xl shadow-lg shadow-primary/10">
+              <DialogTrigger>
+                <Plus className="w-4 h-4 mr-2" /> Nueva venta
+              </DialogTrigger>
+            </Button>
           <DialogContent className="sm:max-w-[525px] rounded-3xl glass">
             <DialogHeader>
               <DialogTitle>Registrar pago</DialogTitle>
@@ -309,6 +317,7 @@ export default function SalesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <Card className="border-none shadow-xl glass overflow-hidden">

@@ -99,12 +99,15 @@ function getCsfSuggestionRows(data: CsfExtractedData & Record<string, unknown>) 
   ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0)
 }
 
+type UserRole = 'superadmin' | 'clinic_admin' | 'reception' | 'accountant'
+
 export default function RequestsPage() {
   const [requests, setRequests] = useState<RequestRow[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRequest, setSelectedRequest] = useState<RequestRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [uuidInput, setUuidInput] = useState('')
+  const [role, setRole] = useState<UserRole>('reception')
   const [emptyState, setEmptyState] = useState({
     title: 'Aun no hay solicitudes de factura',
     description: 'Comparte el QR fijo o genera una venta con link fiscal.',
@@ -119,6 +122,10 @@ export default function RequestsPage() {
       .select('clinic_id, role')
       .eq('id', user?.id)
       .single()
+
+    if (profile?.role) {
+      setRole(profile.role as UserRole)
+    }
 
     let query = supabase
       .from('invoice_requests')
@@ -169,6 +176,10 @@ export default function RequestsPage() {
         .select('clinic_id, role')
         .eq('id', user?.id)
         .single()
+
+      if (profile?.role) {
+        setRole(profile.role as UserRole)
+      }
 
       let query = supabase
         .from('invoice_requests')
@@ -225,6 +236,9 @@ export default function RequestsPage() {
     canCancel: ['fiscal_data_received', 'fiscal_data_pending', 'ready_to_invoice', 'sent_to_accountant'].includes(status),
     canReopen: status === 'rejected',
   })
+
+  const canManageRequests = ['superadmin', 'clinic_admin', 'accountant'].includes(role)
+  const canExportRequests = ['superadmin', 'clinic_admin', 'accountant'].includes(role)
 
   const handleExport = async () => {
     const result = await exportRequestsCsvAction()
@@ -303,9 +317,11 @@ export default function RequestsPage() {
             Descarga un CSV con los datos fiscales y de venta para apoyar la emision de facturas.
           </p>
         </div>
-        <Button variant="outline" className="rounded-xl border-primary text-primary hover:bg-primary/5" onClick={handleExport}>
-          <Download className="w-4 h-4 mr-2" /> Exportar para contador
-        </Button>
+        {canExportRequests && (
+          <Button variant="outline" className="rounded-xl border-primary text-primary hover:bg-primary/5" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" /> Exportar para contador
+          </Button>
+        )}
       </div>
 
       <Card className="border-none shadow-xl glass overflow-hidden">
@@ -489,58 +505,60 @@ export default function RequestsPage() {
                                   )}
                                 </div>
 
-                                <div className="space-y-3 pt-4">
-                                  <p className="text-xs font-semibold text-muted-foreground uppercase px-1">Cambiar estado</p>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {getAvailableStatusActions(selectedRequest.status).canMarkReady && (
-                                      <Button
-                                        variant="outline"
-                                        className="rounded-xl border-emerald-200 hover:bg-emerald-50 text-emerald-700"
-                                        onClick={() => handleStatusChange(selectedRequest.id, 'ready_to_invoice')}
-                                      >
-                                        <FileCheck className="w-4 h-4 mr-2" /> Marcar lista
-                                      </Button>
-                                    )}
-                                    {getAvailableStatusActions(selectedRequest.status).canSendAccountant && (
-                                      <Button
-                                        variant="outline"
-                                        className="rounded-xl border-purple-200 hover:bg-purple-50 text-purple-700"
-                                        onClick={() => handleStatusChange(selectedRequest.id, 'sent_to_accountant')}
-                                      >
-                                        <Mail className="w-4 h-4 mr-2" /> Enviar al contador
-                                      </Button>
-                                    )}
-                                    {getAvailableStatusActions(selectedRequest.status).canReopen && (
-                                      <Button
-                                        variant="outline"
-                                        className="rounded-xl border-blue-200 hover:bg-blue-50 text-blue-700"
-                                        onClick={() => handleStatusChange(selectedRequest.id, 'fiscal_data_received')}
-                                      >
-                                        <Clock className="w-4 h-4 mr-2" /> Reabrir
-                                      </Button>
-                                    )}
-                                    {getAvailableStatusActions(selectedRequest.status).canReject && (
-                                      <Button
-                                        variant="outline"
-                                        className="rounded-xl border-red-100 hover:bg-red-50 text-red-600"
-                                        onClick={() => handleStatusChange(selectedRequest.id, 'rejected', 'Datos incorrectos')}
-                                      >
-                                        <XCircle className="w-4 h-4 mr-2" /> Rechazar
-                                      </Button>
-                                    )}
-                                    {getAvailableStatusActions(selectedRequest.status).canCancel && (
-                                      <Button
-                                        variant="outline"
-                                        className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700"
-                                        onClick={() => handleStatusChange(selectedRequest.id, 'cancelled')}
-                                      >
-                                        <XCircle className="w-4 h-4 mr-2" /> Cancelar
-                                      </Button>
-                                    )}
+                                {canManageRequests && (
+                                  <div className="space-y-3 pt-4">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase px-1">Cambiar estado</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {getAvailableStatusActions(selectedRequest.status).canMarkReady && (
+                                        <Button
+                                          variant="outline"
+                                          className="rounded-xl border-emerald-200 hover:bg-emerald-50 text-emerald-700"
+                                          onClick={() => handleStatusChange(selectedRequest.id, 'ready_to_invoice')}
+                                        >
+                                          <FileCheck className="w-4 h-4 mr-2" /> Marcar lista
+                                        </Button>
+                                      )}
+                                      {getAvailableStatusActions(selectedRequest.status).canSendAccountant && (
+                                        <Button
+                                          variant="outline"
+                                          className="rounded-xl border-purple-200 hover:bg-purple-50 text-purple-700"
+                                          onClick={() => handleStatusChange(selectedRequest.id, 'sent_to_accountant')}
+                                        >
+                                          <Mail className="w-4 h-4 mr-2" /> Enviar al contador
+                                        </Button>
+                                      )}
+                                      {getAvailableStatusActions(selectedRequest.status).canReopen && (
+                                        <Button
+                                          variant="outline"
+                                          className="rounded-xl border-blue-200 hover:bg-blue-50 text-blue-700"
+                                          onClick={() => handleStatusChange(selectedRequest.id, 'fiscal_data_received')}
+                                        >
+                                          <Clock className="w-4 h-4 mr-2" /> Reabrir
+                                        </Button>
+                                      )}
+                                      {getAvailableStatusActions(selectedRequest.status).canReject && (
+                                        <Button
+                                          variant="outline"
+                                          className="rounded-xl border-red-100 hover:bg-red-50 text-red-600"
+                                          onClick={() => handleStatusChange(selectedRequest.id, 'rejected', 'Datos incorrectos')}
+                                        >
+                                          <XCircle className="w-4 h-4 mr-2" /> Rechazar
+                                        </Button>
+                                      )}
+                                      {getAvailableStatusActions(selectedRequest.status).canCancel && (
+                                        <Button
+                                          variant="outline"
+                                          className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700"
+                                          onClick={() => handleStatusChange(selectedRequest.id, 'cancelled')}
+                                        >
+                                          <XCircle className="w-4 h-4 mr-2" /> Cancelar
+                                        </Button>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
+                                )}
 
-                                {['ready_to_invoice', 'sent_to_accountant'].includes(selectedRequest.status) && (
+                                {canManageRequests && ['ready_to_invoice', 'sent_to_accountant'].includes(selectedRequest.status) && (
                                   <div className="space-y-3">
                                     <div className="space-y-1">
                                       <Label>Capturar UUID y marcar como emitida</Label>
@@ -566,6 +584,12 @@ export default function RequestsPage() {
                                     <div className="rounded-xl border bg-slate-50 dark:bg-slate-900 px-3 py-2 font-mono text-xs">
                                       {selectedRequest.uuid || 'Sin UUID registrado'}
                                     </div>
+                                  </div>
+                                )}
+
+                                {!canManageRequests && (
+                                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+                                    Solo administradores y contadores pueden cambiar el estado de las solicitudes.
                                   </div>
                                 )}
                               </div>

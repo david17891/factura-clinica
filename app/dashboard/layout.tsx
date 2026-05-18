@@ -30,7 +30,38 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { toast } from 'sonner'
 
-const navItems = [
+type UserRole = 'superadmin' | 'clinic_admin' | 'reception' | 'accountant'
+
+const navItemsByRole: Record<UserRole, Array<{ label: string; icon: typeof Home; href: string }>> = {
+  superadmin: [
+    { label: 'Inicio', icon: Home, href: '/dashboard' },
+    { label: 'Ventas', icon: ClipboardList, href: '/dashboard/sales' },
+    { label: 'Solicitudes', icon: FileText, href: '/dashboard/requests' },
+    { label: 'QR fijo', icon: QrCode, href: '/dashboard/qr' },
+    { label: 'Sitio publico', icon: Landmark, href: '/' },
+  ],
+  clinic_admin: [
+    { label: 'Inicio', icon: Home, href: '/dashboard' },
+    { label: 'Ventas', icon: ClipboardList, href: '/dashboard/sales' },
+    { label: 'Solicitudes', icon: FileText, href: '/dashboard/requests' },
+    { label: 'QR fijo', icon: QrCode, href: '/dashboard/qr' },
+    { label: 'Sitio publico', icon: Landmark, href: '/' },
+  ],
+  reception: [
+    { label: 'Inicio', icon: Home, href: '/dashboard' },
+    { label: 'Ventas', icon: ClipboardList, href: '/dashboard/sales' },
+    { label: 'Solicitudes', icon: FileText, href: '/dashboard/requests' },
+    { label: 'QR fijo', icon: QrCode, href: '/dashboard/qr' },
+    { label: 'Sitio publico', icon: Landmark, href: '/' },
+  ],
+  accountant: [
+    { label: 'Inicio', icon: Home, href: '/dashboard' },
+    { label: 'Solicitudes', icon: FileText, href: '/dashboard/requests' },
+    { label: 'Sitio publico', icon: Landmark, href: '/' },
+  ],
+}
+
+const allNavItems = [
   { label: 'Inicio', icon: Home, href: '/dashboard' },
   { label: 'Ventas', icon: ClipboardList, href: '/dashboard/sales' },
   { label: 'Solicitudes', icon: FileText, href: '/dashboard/requests' },
@@ -38,7 +69,9 @@ const navItems = [
   { label: 'Sitio publico', icon: Landmark, href: '/' },
 ]
 
-function SidebarContent({ user, pathname, onLogout }: { user: { email: string } | null; pathname: string; onLogout: () => void }) {
+function SidebarContent({ user, pathname, onLogout, role }: { user: { email: string } | null; pathname: string; onLogout: () => void; role: UserRole }) {
+  const navItems = navItemsByRole[role] ?? allNavItems
+
   return (
     <div className="flex flex-col h-full py-6">
       <div className="px-6 mb-10 flex items-center gap-3">
@@ -96,6 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const supabase = createClient()
   const [user, setUser] = useState<{ email: string } | null>(null)
+  const [role, setRole] = useState<UserRole>('reception')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -106,6 +140,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return
       }
       setUser(user ? { email: user.email ?? '' } : null)
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.role) {
+        setRole(profile.role as UserRole)
+      }
+
       setLoading(false)
     }
     getUser()
@@ -129,7 +174,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex">
       <aside className="hidden lg:block w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 shrink-0 sticky top-0 h-screen">
-        <SidebarContent user={user} pathname={pathname} onLogout={handleLogout} />
+        <SidebarContent user={user} pathname={pathname} onLogout={handleLogout} role={role} />
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -142,7 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </SheetTrigger>
               </Button>
               <SheetContent side="left" className="p-0 w-72">
-                <SidebarContent user={user} pathname={pathname} onLogout={handleLogout} />
+                <SidebarContent user={user} pathname={pathname} onLogout={handleLogout} role={role} />
               </SheetContent>
             </Sheet>
             <h2 className="text-lg font-semibold lg:hidden">Factura Clínica</h2>
