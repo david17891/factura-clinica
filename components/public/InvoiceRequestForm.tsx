@@ -58,6 +58,26 @@ interface InvoiceRequestFormProps {
   clinic: Clinic
   sale?: Sale
   mode: 'fixed' | 'sale'
+  correction?: InvoiceRequestCorrectionContext | null
+}
+
+export interface InvoiceRequestCorrectionContext {
+  token: string
+  message: string | null
+  requestedAt: string | null
+  patientName: string | null
+  patientPhone: string | null
+  patientEmail: string | null
+  rfc: string
+  legalName: string
+  taxZipCode: string
+  taxRegime: string
+  cfdiUse: string
+  notes: string | null
+  paymentDate: string | null
+  amount: number | null
+  serviceName: string | null
+  paymentMethod: string | null
 }
 
 function getSafeExtension(file: File) {
@@ -78,7 +98,7 @@ function getDetectedLabel(fieldName: keyof CsfExtractedData, data: CsfExtractedD
     </span>
   ) : null
 }
-export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormProps) {
+export function InvoiceRequestForm({ clinic, sale, mode, correction }: InvoiceRequestFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -95,19 +115,19 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      patientName: '',
-      patientPhone: '',
-      email: sale?.patient_email || '',
-      rfc: '',
-      legalName: '',
-      taxZipCode: '',
-      taxRegime: '',
-      cfdiUse: 'D01',
-      notes: '',
-      paymentDate: new Date().toISOString().split('T')[0],
-      amount: sale?.amount?.toString() || '',
-      serviceName: sale?.service_name || '',
-      paymentMethod: '',
+      patientName: correction?.patientName || '',
+      patientPhone: correction?.patientPhone || '',
+      email: correction?.patientEmail || sale?.patient_email || '',
+      rfc: correction?.rfc || '',
+      legalName: correction?.legalName || '',
+      taxZipCode: correction?.taxZipCode || '',
+      taxRegime: correction?.taxRegime || '',
+      cfdiUse: correction?.cfdiUse || 'D01',
+      notes: correction?.notes || '',
+      paymentDate: correction?.paymentDate || new Date().toISOString().split('T')[0],
+      amount: correction?.amount?.toString() || sale?.amount?.toString() || '',
+      serviceName: correction?.serviceName || sale?.service_name || '',
+      paymentMethod: correction?.paymentMethod || '',
     },
   })
 
@@ -194,6 +214,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
       p_invoice_request_id: requestId,
       p_clinic_slug: clinic.slug,
       p_public_invoice_token: sale?.public_invoice_token ?? null,
+      p_correction_token: correction?.token ?? null,
       p_storage_path: storagePath,
       p_original_filename: csfFile.name,
       p_mime_type: csfFile.type,
@@ -230,6 +251,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
         p_tax_regime: values.taxRegime,
         p_cfdi_use: values.cfdiUse,
         p_notes: values.notes || null,
+        p_correction_token: correction?.token ?? null,
       })
 
       if (rpcError) {
@@ -257,7 +279,7 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
             <CheckCircle2 className="h-8 w-8 text-emerald-600" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-bold">Solicitud recibida</h2>
+            <h2 className="text-2xl font-bold">{correction ? 'Corrección recibida' : 'Solicitud recibida'}</h2>
             <p className="text-muted-foreground">
               Tu clínica o contador revisará los datos y emitirá la factura en su sistema actual.
             </p>
@@ -286,6 +308,22 @@ export function InvoiceRequestForm({ clinic, sale, mode }: InvoiceRequestFormPro
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {correction && (
+          <Alert className="rounded-2xl border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/10">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+            <AlertTitle className="text-sm font-semibold text-amber-800 dark:text-amber-400">
+              Tu solicitud requiere una corrección
+            </AlertTitle>
+            <AlertDescription className="space-y-2 text-sm text-amber-700 dark:text-amber-500">
+              <p>Revisa el mensaje de la clínica o contador, corrige tus datos y vuelve a enviar el formulario.</p>
+              {correction.message && (
+                <p className="rounded-xl bg-white/70 p-3 font-medium text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                  {correction.message}
+                </p>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
         <Card className="glass border-primary/10">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

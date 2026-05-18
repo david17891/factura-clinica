@@ -31,8 +31,9 @@ export async function createInvoiceRequestAction(_input: unknown) {
 const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
   fiscal_data_received: ['ready_to_invoice', 'sent_to_accountant', 'rejected', 'cancelled'],
   fiscal_data_pending:  ['fiscal_data_received', 'rejected', 'cancelled'],
-  ready_to_invoice:     ['sent_to_accountant', 'rejected', 'cancelled'],
-  sent_to_accountant:   ['rejected', 'cancelled'],
+  ready_to_invoice:     ['rejected', 'cancelled'],
+  sent_to_accountant:   ['ready_to_invoice', 'rejected', 'cancelled'],
+  corrected_by_patient: ['sent_to_accountant', 'ready_to_invoice', 'rejected', 'cancelled'],
   issued:               [],  // estado final — no se puede cambiar desde aquí
   rejected:             ['fiscal_data_received'],  // permite reintento
   cancelled:            [],  // estado final
@@ -63,7 +64,7 @@ export async function updateInvoiceRequestStatusAction(
   // 2. Verificar que la solicitud existe y pertenece a una clínica accesible
   const { data: request, error: fetchError } = await supabase
     .from('invoice_requests')
-    .select('id, clinic_id, status')
+    .select('id, clinic_id, status, correction_count')
     .eq('id', requestId)
     .single()
 
@@ -100,8 +101,19 @@ export async function updateInvoiceRequestStatusAction(
 
   // 5. Aplicar actualización
   const updateData: Record<string, unknown> = { status: newStatus }
-  if (rejectionReason && newStatus === 'rejected') {
-    updateData.rejection_reason = rejectionReason
+  if (newStatus === 'rejected') {
+    if (!rejectionReason?.trim()) {
+      return { error: 'Ingresa el motivo de correccion para el paciente' }
+    }
+    const correctionMessage = rejectionReason.trim()
+    updateData.rejection_reason = correctionMessage
+    updateData.correction_message = correctionMessage
+    updateData.correction_requested_at = new Date().toISOString()
+    updateData.correction_requested_by = profile.id
+    updateData.correction_resolved_at = null
+    updateData.correction_count = (request.correction_count ?? 0) + 1
+  } else {
+    updateData.rejection_reason = null
   }
 
   const { error } = await supabase
@@ -175,7 +187,7 @@ export async function assignUuidAction(requestId: string, cfdiUuid: string) {
   }
 
   // 7. Verificar que la solicitud esté en estado apropiado para asignar UUID
-  const validStatesForUuid = ['ready_to_invoice', 'sent_to_accountant']
+  const validStatesForUuid = ['ready_to_invoice']
   if (!validStatesForUuid.includes(request.status)) {
     return {
       error: `No se puede asignar UUID a una solicitud en estado '${request.status}'`,

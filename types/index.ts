@@ -8,6 +8,7 @@ export type InvoiceStatus =
   | 'sent_to_accountant'
   | 'issued'
   | 'rejected'
+  | 'corrected_by_patient'
   | 'cancelled';
 
 export interface Clinic {
@@ -73,6 +74,12 @@ export interface InvoiceRequest {
   status: InvoiceStatus;
   uuid: string | null;
   rejection_reason: string | null;
+  correction_message?: string | null;
+  correction_requested_at?: string | null;
+  correction_requested_by?: string | null;
+  correction_resolved_at?: string | null;
+  correction_count?: number;
+  correction_token?: string;
   source: 'fixed_qr' | 'sale_qr' | 'manual' | 'csf_upload_pending';
   created_at: string;
   updated_at?: string;

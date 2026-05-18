@@ -24,6 +24,7 @@ import {
   FileCheck,
   Mail,
   Info,
+  MessageCircle,
 } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import {
@@ -70,23 +71,30 @@ interface RequestRow {
   patient_phone: string | null
   uuid: string | null
   rejection_reason: string | null
+  correction_message: string | null
+  correction_requested_at: string | null
+  correction_resolved_at: string | null
+  correction_count: number
+  correction_token: string
   source: string
   created_at: string
   sales: { folio: string; service_name: string; amount: number; created_at: string } | null
+  clinics: { slug: string } | null
   invoice_request_csf_documents: CsfDocumentRow[]
 }
 
 const statusConfig: Record<string, { label: string; color: string; icon: typeof Info }> = {
-  fiscal_data_received: { label: 'Datos recibidos', color: 'bg-blue-100 text-blue-700', icon: Clock },
+  fiscal_data_received: { label: 'Recibida', color: 'bg-blue-100 text-blue-700', icon: Clock },
   fiscal_data_pending: { label: 'Datos pendientes', color: 'bg-amber-100 text-amber-700', icon: Clock },
+  corrected_by_patient: { label: 'Corregida por paciente', color: 'bg-cyan-100 text-cyan-700', icon: Clock },
   ready_to_invoice: { label: 'Lista para facturar', color: 'bg-emerald-100 text-emerald-700', icon: FileCheck },
-  sent_to_accountant: { label: 'Enviada al contador', color: 'bg-purple-100 text-purple-700', icon: FileCheck },
+  sent_to_accountant: { label: 'En revisión', color: 'bg-purple-100 text-purple-700', icon: FileCheck },
   issued: { label: 'Emitida', color: 'bg-slate-100 text-slate-700', icon: CheckCircle2 },
-  rejected: { label: 'Rechazada', color: 'bg-red-100 text-red-700', icon: XCircle },
-  cancelled: { label: 'Cancelada', color: 'bg-gray-100 text-gray-700', icon: XCircle },
+  rejected: { label: 'Requiere corrección', color: 'bg-red-100 text-red-700', icon: XCircle },
+  cancelled: { label: 'Cancelada / No facturable', color: 'bg-gray-100 text-gray-700', icon: XCircle },
 }
 
-const requestsSelect = '*, sales!invoice_requests_sale_id_fkey(folio, service_name, amount, created_at), invoice_request_csf_documents(id, original_filename, mime_type, file_size, extraction_status, extracted_data, created_at)'
+const requestsSelect = '*, clinics!invoice_requests_clinic_id_fkey(slug), sales!invoice_requests_sale_id_fkey(folio, service_name, amount, created_at), invoice_request_csf_documents(id, original_filename, mime_type, file_size, extraction_status, extracted_data, created_at)'
 
 function getCsfSuggestionRows(data: CsfExtractedData & Record<string, unknown>) {
   return [
@@ -107,6 +115,9 @@ export default function RequestsPage() {
   const [selectedRequest, setSelectedRequest] = useState<RequestRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [uuidInput, setUuidInput] = useState('')
+  const [isCorrectionFormOpen, setIsCorrectionFormOpen] = useState(false)
+  const [correctionMessageInput, setCorrectionMessageInput] = useState('')
+  const [correctionMessageError, setCorrectionMessageError] = useState<string | null>(null)
   const [role, setRole] = useState<UserRole>('reception')
   const [emptyState, setEmptyState] = useState({
     title: 'Aun no hay solicitudes de factura',
@@ -230,10 +241,10 @@ export default function RequestsPage() {
   )
 
   const getAvailableStatusActions = (status: string) => ({
-    canMarkReady: ['fiscal_data_received'].includes(status),
-    canSendAccountant: ['fiscal_data_received', 'ready_to_invoice'].includes(status),
-    canReject: ['fiscal_data_received', 'fiscal_data_pending', 'ready_to_invoice', 'sent_to_accountant'].includes(status),
-    canCancel: ['fiscal_data_received', 'fiscal_data_pending', 'ready_to_invoice', 'sent_to_accountant'].includes(status),
+    canMarkReady: ['fiscal_data_received', 'sent_to_accountant', 'corrected_by_patient'].includes(status),
+    canMarkReview: ['fiscal_data_received', 'corrected_by_patient'].includes(status),
+    canReject: ['fiscal_data_received', 'fiscal_data_pending', 'ready_to_invoice', 'sent_to_accountant', 'corrected_by_patient'].includes(status),
+    canCancel: ['fiscal_data_received', 'fiscal_data_pending', 'ready_to_invoice', 'sent_to_accountant', 'corrected_by_patient'].includes(status),
     canReopen: status === 'rejected',
   })
 
@@ -269,8 +280,88 @@ export default function RequestsPage() {
     toast.success(`Estado actualizado a ${statusConfig[newStatus]?.label || newStatus}`)
     await fetchRequests()
     if (selectedRequest?.id === id) {
-      setSelectedRequest(prev => prev ? { ...prev, status: newStatus } : null)
+      setSelectedRequest(prev => prev ? {
+        ...prev,
+        status: newStatus,
+        correction_message: newStatus === 'rejected' ? rejectionReason || prev.correction_message : prev.correction_message,
+      } : null)
     }
+  }
+
+  const handleRequestCorrection = async () => {
+    if (!selectedRequest) return
+
+    const message = correctionMessageInput.trim()
+    if (!message) {
+      setCorrectionMessageError('Escribe el motivo de corrección antes de confirmar.')
+      return
+    }
+
+    setCorrectionMessageError(null)
+    const result = await updateInvoiceRequestStatusAction(selectedRequest.id, 'rejected', message)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
+
+    toast.success('Solicitud marcada como requiere corrección')
+    setSelectedRequest(prev => prev ? {
+      ...prev,
+      status: 'rejected',
+      correction_message: message,
+      rejection_reason: message,
+    } : null)
+    setRequests(prev => prev.map(req =>
+      req.id === selectedRequest.id
+        ? { ...req, status: 'rejected', correction_message: message, rejection_reason: message }
+        : req
+    ))
+    setIsCorrectionFormOpen(false)
+    setCorrectionMessageInput('')
+    await fetchRequests()
+  }
+
+  const getCorrectionLink = (request: RequestRow) => {
+    const slug = request.clinics?.slug
+    if (!slug || !request.correction_token) return ''
+    return `${window.location.origin}/factura/${slug}?correction=${encodeURIComponent(request.correction_token)}`
+  }
+
+  const getCorrectionMessage = (request: RequestRow) => {
+    const link = getCorrectionLink(request)
+    return [
+      `Hola ${request.patient_name || ''}`.trim() + ', revisamos tu solicitud de factura y necesitamos que confirmes una corrección:',
+      '',
+      request.correction_message || 'Por favor revisa tus datos fiscales.',
+      '',
+      'Por favor actualiza tus datos en este enlace:',
+      link,
+      '',
+      'Gracias.',
+    ].join('\n')
+  }
+
+  const copyCorrectionMessage = async (request: RequestRow) => {
+    const message = getCorrectionMessage(request)
+    if (!message.includes('/factura/')) {
+      toast.error('No se pudo generar el enlace de corrección')
+      return
+    }
+    await navigator.clipboard.writeText(message)
+    toast.success('Mensaje copiado')
+  }
+
+  const openCorrectionWhatsApp = (request: RequestRow) => {
+    const phone = request.patient_phone?.replace(/\D/g, '')
+    const message = getCorrectionMessage(request)
+    if (!message.includes('/factura/')) {
+      toast.error('No se pudo generar el enlace de corrección')
+      return
+    }
+    const url = phone
+      ? `https://wa.me/52${phone}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   const handleAssignUuid = async () => {
@@ -376,7 +467,13 @@ export default function RequestsPage() {
                       <TableCell className="text-right">
                         <Sheet>
                           <Button asChild variant="ghost" size="sm" className="rounded-xl">
-                            <SheetTrigger onClick={() => { setSelectedRequest(req); setUuidInput(req.uuid || '') }}>
+                            <SheetTrigger onClick={() => {
+                              setSelectedRequest(req)
+                              setUuidInput(req.uuid || '')
+                              setIsCorrectionFormOpen(false)
+                              setCorrectionMessageInput('')
+                              setCorrectionMessageError(null)
+                            }}>
                               <Eye className="w-4 h-4 mr-2" /> Detalle
                             </SheetTrigger>
                           </Button>
@@ -505,26 +602,55 @@ export default function RequestsPage() {
                                   )}
                                 </div>
 
+                                {selectedRequest.status === 'rejected' && (
+                                  <div className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                    <div className="space-y-1">
+                                      <p className="font-semibold">Solicitud requiere corrección</p>
+                                      <p className="text-amber-800">
+                                        {selectedRequest.correction_message || selectedRequest.rejection_reason || 'No hay motivo registrado.'}
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-col gap-2 sm:flex-row">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="rounded-xl border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+                                        onClick={() => copyCorrectionMessage(selectedRequest)}
+                                      >
+                                        <MessageCircle className="mr-2 h-4 w-4" /> Copiar mensaje para paciente
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="rounded-xl border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
+                                        onClick={() => openCorrectionWhatsApp(selectedRequest)}
+                                      >
+                                        <MessageCircle className="mr-2 h-4 w-4" /> Abrir WhatsApp
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+
                                 {canManageRequests && (
                                   <div className="space-y-3 pt-4">
-                                    <p className="text-xs font-semibold text-muted-foreground uppercase px-1">Cambiar estado</p>
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase px-1">Acciones contables</p>
                                     <div className="grid grid-cols-2 gap-2">
+                                      {getAvailableStatusActions(selectedRequest.status).canMarkReview && (
+                                        <Button
+                                          variant="outline"
+                                          className="rounded-xl border-purple-200 hover:bg-purple-50 text-purple-700"
+                                          onClick={() => handleStatusChange(selectedRequest.id, 'sent_to_accountant')}
+                                        >
+                                          <FileCheck className="w-4 h-4 mr-2" /> Marcar en revisión
+                                        </Button>
+                                      )}
                                       {getAvailableStatusActions(selectedRequest.status).canMarkReady && (
                                         <Button
                                           variant="outline"
                                           className="rounded-xl border-emerald-200 hover:bg-emerald-50 text-emerald-700"
                                           onClick={() => handleStatusChange(selectedRequest.id, 'ready_to_invoice')}
                                         >
-                                          <FileCheck className="w-4 h-4 mr-2" /> Marcar lista
-                                        </Button>
-                                      )}
-                                      {getAvailableStatusActions(selectedRequest.status).canSendAccountant && (
-                                        <Button
-                                          variant="outline"
-                                          className="rounded-xl border-purple-200 hover:bg-purple-50 text-purple-700"
-                                          onClick={() => handleStatusChange(selectedRequest.id, 'sent_to_accountant')}
-                                        >
-                                          <Mail className="w-4 h-4 mr-2" /> Enviar al contador
+                                          <FileCheck className="w-4 h-4 mr-2" /> Lista para facturar
                                         </Button>
                                       )}
                                       {getAvailableStatusActions(selectedRequest.status).canReopen && (
@@ -533,16 +659,19 @@ export default function RequestsPage() {
                                           className="rounded-xl border-blue-200 hover:bg-blue-50 text-blue-700"
                                           onClick={() => handleStatusChange(selectedRequest.id, 'fiscal_data_received')}
                                         >
-                                          <Clock className="w-4 h-4 mr-2" /> Reabrir
+                                          <Clock className="w-4 h-4 mr-2" /> Marcar recibida
                                         </Button>
                                       )}
                                       {getAvailableStatusActions(selectedRequest.status).canReject && (
                                         <Button
                                           variant="outline"
                                           className="rounded-xl border-red-100 hover:bg-red-50 text-red-600"
-                                          onClick={() => handleStatusChange(selectedRequest.id, 'rejected', 'Datos incorrectos')}
+                                          onClick={() => {
+                                            setIsCorrectionFormOpen(true)
+                                            setCorrectionMessageError(null)
+                                          }}
                                         >
-                                          <XCircle className="w-4 h-4 mr-2" /> Rechazar
+                                          <XCircle className="w-4 h-4 mr-2" /> Requiere corrección
                                         </Button>
                                       )}
                                       {getAvailableStatusActions(selectedRequest.status).canCancel && (
@@ -551,14 +680,54 @@ export default function RequestsPage() {
                                           className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700"
                                           onClick={() => handleStatusChange(selectedRequest.id, 'cancelled')}
                                         >
-                                          <XCircle className="w-4 h-4 mr-2" /> Cancelar
+                                          <XCircle className="w-4 h-4 mr-2" /> Cancelar / No facturable
                                         </Button>
                                       )}
                                     </div>
+                                    {isCorrectionFormOpen && (
+                                      <div className="space-y-3 rounded-2xl border border-red-100 bg-red-50 p-4">
+                                        <div className="space-y-1">
+                                          <Label htmlFor="correction-message">Motivo de corrección</Label>
+                                          <p className="text-xs text-red-700">
+                                            Este mensaje se incluirá en WhatsApp y será visible para el paciente en el formulario público.
+                                          </p>
+                                        </div>
+                                        <textarea
+                                          id="correction-message"
+                                          value={correctionMessageInput}
+                                          onChange={(event) => {
+                                            setCorrectionMessageInput(event.target.value)
+                                            if (correctionMessageError) setCorrectionMessageError(null)
+                                          }}
+                                          placeholder="Ej. El código postal fiscal no coincide con la constancia."
+                                          className="min-h-24 w-full resize-y rounded-xl border border-red-200 bg-white px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                                        />
+                                        {correctionMessageError && (
+                                          <p className="text-xs font-medium text-red-700">{correctionMessageError}</p>
+                                        )}
+                                        <div className="flex flex-col gap-2 sm:flex-row">
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="rounded-xl bg-white"
+                                            onClick={() => {
+                                              setIsCorrectionFormOpen(false)
+                                              setCorrectionMessageInput('')
+                                              setCorrectionMessageError(null)
+                                            }}
+                                          >
+                                            Cancelar
+                                          </Button>
+                                          <Button type="button" className="rounded-xl" onClick={handleRequestCorrection}>
+                                            Confirmar corrección
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
-                                {canManageRequests && ['ready_to_invoice', 'sent_to_accountant'].includes(selectedRequest.status) && (
+                                {canManageRequests && selectedRequest.status === 'ready_to_invoice' && (
                                   <div className="space-y-3">
                                     <div className="space-y-1">
                                       <Label>Capturar UUID y marcar como emitida</Label>

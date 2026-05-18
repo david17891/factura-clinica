@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { InvoiceRequestForm } from '@/components/public/InvoiceRequestForm'
+import { InvoiceRequestForm, type InvoiceRequestCorrectionContext } from '@/components/public/InvoiceRequestForm'
 import { Card, CardContent } from '@/components/ui/card'
 import { Building2, MapPin, Phone } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
@@ -11,15 +11,88 @@ interface ClinicContext {
   phone: string | null
 }
 
-export default async function FixedQrPage({ params }: { params: Promise<{ slug: string }> }) {
+interface CorrectionContext {
+  clinic_name: string
+  clinic_slug: string
+  clinic_address: string | null
+  clinic_phone: string | null
+  sale_folio: string | null
+  service_name: string | null
+  amount: number | null
+  patient_name: string | null
+  patient_phone: string | null
+  patient_email: string | null
+  rfc: string
+  legal_name: string
+  tax_zip_code: string
+  tax_regime: string
+  cfdi_use: string
+  notes: string | null
+  payment_date: string | null
+  payment_method: string | null
+  correction_message: string | null
+  correction_requested_at: string | null
+}
+
+export default async function FixedQrPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>
+  searchParams: Promise<{ correction?: string }>
+}) {
   const { slug } = await params
+  const { correction: correctionToken } = await searchParams
   const supabase = await createClient()
 
-  // Usar RPC publica SECURITY DEFINER para obtener datos minimos de clinica.
-  // Esto evita depender de SELECT directo con RLS anon.
-  const { data, error } = await supabase.rpc('get_public_clinic_invoice_context', {
-    p_clinic_slug: slug,
-  })
+  let correction: InvoiceRequestCorrectionContext | null = null
+  let data: ClinicContext[] | null = null
+  let error: { message: string } | null = null
+
+  if (correctionToken) {
+    const correctionResult = await supabase.rpc('get_public_invoice_correction_context', {
+      p_clinic_slug: slug,
+      p_correction_token: correctionToken,
+    })
+    error = correctionResult.error
+    const correctionData = correctionResult.data as CorrectionContext[] | null
+
+    if (!error && correctionData?.length) {
+      const ctx = correctionData[0]
+      data = [{
+        clinic_name: ctx.clinic_name,
+        clinic_slug: ctx.clinic_slug,
+        address: ctx.clinic_address,
+        phone: ctx.clinic_phone,
+      }]
+      correction = {
+        token: correctionToken,
+        message: ctx.correction_message,
+        requestedAt: ctx.correction_requested_at,
+        patientName: ctx.patient_name,
+        patientPhone: ctx.patient_phone,
+        patientEmail: ctx.patient_email,
+        rfc: ctx.rfc,
+        legalName: ctx.legal_name,
+        taxZipCode: ctx.tax_zip_code,
+        taxRegime: ctx.tax_regime,
+        cfdiUse: ctx.cfdi_use,
+        notes: ctx.notes,
+        paymentDate: ctx.payment_date,
+        amount: ctx.amount,
+        serviceName: ctx.service_name,
+        paymentMethod: ctx.payment_method,
+      }
+    }
+  } else {
+    // Usar RPC publica SECURITY DEFINER para obtener datos minimos de clinica.
+    // Esto evita depender de SELECT directo con RLS anon.
+    const clinicResult = await supabase.rpc('get_public_clinic_invoice_context', {
+      p_clinic_slug: slug,
+    })
+    data = clinicResult.data
+    error = clinicResult.error
+  }
 
   if (error || !data || data.length === 0) {
     notFound()
@@ -73,7 +146,7 @@ export default async function FixedQrPage({ params }: { params: Promise<{ slug: 
               </div>
             </div>
             <div className="p-6 md:p-8">
-              <InvoiceRequestForm clinic={clinic} mode="fixed" />
+              <InvoiceRequestForm clinic={clinic} mode="fixed" correction={correction} />
             </div>
           </CardContent>
         </Card>

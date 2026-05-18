@@ -26,6 +26,17 @@ type ExportInvoiceRequestRow = {
   updated_at: string | null
 }
 
+const exportStatusLabels: Record<string, string> = {
+  fiscal_data_received: 'Recibida',
+  fiscal_data_pending: 'Datos pendientes',
+  sent_to_accountant: 'En revisión',
+  corrected_by_patient: 'Corregida por paciente',
+  ready_to_invoice: 'Lista para facturar',
+  issued: 'Emitida',
+  rejected: 'Requiere corrección',
+  cancelled: 'Cancelada / No facturable',
+}
+
 export async function exportRequestsCsvAction() {
   const profile = await getCurrentProfile()
   if (!profile || !canExport(profile.role)) {
@@ -51,7 +62,7 @@ export async function exportRequestsCsvAction() {
     cp_fiscal: row.tax_zip_code || '',
     regimen_fiscal: row.tax_regime || '',
     uso_cfdi: row.cfdi_use || '',
-    estado: row.request_status || '',
+    estado: row.request_status ? exportStatusLabels[row.request_status] || row.request_status : '',
     uuid: row.cfdi_uuid || '',
     constancia_subida: row.constancia_subida ? 'si' : 'no',
     fecha_solicitud: row.created_at || '',

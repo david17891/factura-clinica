@@ -48,11 +48,11 @@
 | Ver constancia subida | Sí | Sí | Sí | Metadata visible; archivo vía signed URL |
 | Abrir constancia (signed URL) | Sí | Sí | Sí | Server-side temporal 60s |
 | Cambiar estado de solicitud | Sí | **No** | Sí | Recepción es solo lectura |
+| Marcar en revisión | Sí | No | Sí | `sent_to_accountant` mostrado como "En revisión" |
 | Marcar lista para facturar | Sí | No | Sí | `ready_to_invoice` |
-| Enviar al contador | Sí | No | Sí | `sent_to_accountant` |
 | Reabrir solicitud rechazada | Sí | No | Sí | `fiscal_data_received` desde `rejected` |
-| Rechazar solicitud | Sí | No | Sí | `rejected` con motivo |
-| Cancelar solicitud | Sí | No | Sí | `cancelled` |
+| Requiere corrección | Sí | No | Sí | `rejected` con motivo |
+| Cancelar / No facturable | Sí | No | Sí | `cancelled` |
 | Capturar UUID | Sí | **No** | Sí | Requiere rol `clinic_admin` o `accountant` |
 | Marcar como emitida | Sí | No | Sí | vía `assignUuidAction` |
 | Exportar CSV | Sí | **No** | Sí | `canExport` valida rol |
@@ -84,24 +84,52 @@
 
 ## Estados y transiciones
 
+### Flujo final de solicitud
+
+El flujo visible evita la acción "Enviar al contador" porque el contador ya ve automáticamente las solicitudes de sus clínicas asignadas. El estado interno `sent_to_accountant` se conserva por compatibilidad, pero en UI y documentación se interpreta como **En revisión**.
+
+| Acción visible | Estado interno resultante | Roles |
+|----------------|---------------------------|-------|
+| Marcar en revisión | `sent_to_accountant` | Admin, Contador |
+| Lista para facturar | `ready_to_invoice` | Admin, Contador |
+| Requiere corrección | `rejected` | Admin, Contador |
+| Cancelar / No facturable | `cancelled` | Admin, Contador |
+| Guardar UUID y marcar como emitida | `issued` | Admin, Contador |
+
+Recepción puede ver solicitudes, estado, constancia y datos confirmados, pero no opera el flujo fiscal.
+
+### Flujo "Requiere corrección"
+
+1. Admin o contador detecta un problema en los datos fiscales.
+2. Admin o contador marca la solicitud como **Requiere corrección** y debe capturar un mensaje para el paciente.
+3. El sistema guarda `correction_message`, `correction_requested_at`, `correction_requested_by`, incrementa `correction_count` y mantiene un `correction_token` no enumerable.
+4. Recepción, admin o contador pueden copiar el mensaje o abrir WhatsApp manual con el enlace `/factura/[slug]?correction=[token]`.
+5. El paciente abre el enlace, ve el motivo, revisa los datos precargados y reenvía el formulario.
+6. La RPC pública actualiza la misma `invoice_request`; no crea duplicado.
+7. La solicitud pasa a `corrected_by_patient`.
+8. Admin o contador la revisa de nuevo, la marca en revisión o lista para facturar, y después captura UUID para dejarla `issued`.
+
+WhatsApp sigue siendo manual. No hay WhatsApp API, CFDI automático, PAC ni validación SAT.
+
 ### Estados de solicitud fiscal (`invoice_status`)
 
 | Estado | Significado | Quién puede llegar |
 |--------|-------------|-------------------|
 | `fiscal_data_pending` | Se creó venta pero paciente no ha enviado datos | Automático al crear venta |
-| `fiscal_data_received` | Paciente envió datos; pendiente de revisión | Admin/Contador puede reabrir desde `rejected` |
+| `fiscal_data_received` | Recibida; paciente envió datos fiscales | Admin/Contador puede reabrir desde `rejected` |
 | `ready_to_invoice` | Datos validados; lista para facturar | Admin/Contador desde `fiscal_data_received` |
-| `sent_to_accountant` | Enviada al contador (delegación) | Admin/Contador desde `fiscal_data_received` o `ready_to_invoice` |
+| `sent_to_accountant` | En revisión fiscal | Admin/Contador desde `fiscal_data_received` |
+| `corrected_by_patient` | Corregida por paciente; pendiente de nueva revisión | Paciente vía enlace de corrección |
 | `issued` | Factura emitida; UUID capturado | Admin/Contador vía `assignUuidAction` |
-| `rejected` | Datos incorrectos; paciente debe corregir | Admin/Contador desde estados previos |
-| `cancelled` | Cancelada; no se facturará | Admin/Contador desde estados previos |
+| `rejected` | Requiere corrección; datos insuficientes o incorrectos | Admin/Contador desde estados previos |
+| `cancelled` | Cancelada / No facturable | Admin/Contador desde estados previos |
 | `not_requested` | Venta sin solicitud asociada | Estado de venta, no de solicitud |
 
 ### Transiciones permitidas
 
 ```
 fiscal_data_received → ready_to_invoice
-fiscal_data_received → sent_to_accountant
+fiscal_data_received → sent_to_accountant  (marcar en revisión)
 fiscal_data_received → rejected
 fiscal_data_received → cancelled
 
@@ -109,12 +137,17 @@ fiscal_data_pending → fiscal_data_received  (cuando paciente envía)
 fiscal_data_pending → rejected
 fiscal_data_pending → cancelled
 
-ready_to_invoice → sent_to_accountant
 ready_to_invoice → rejected
 ready_to_invoice → cancelled
 
+sent_to_accountant → ready_to_invoice
 sent_to_accountant → rejected
 sent_to_accountant → cancelled
+
+corrected_by_patient → sent_to_accountant
+corrected_by_patient → ready_to_invoice
+corrected_by_patient → rejected
+corrected_by_patient → cancelled
 
 rejected → fiscal_data_received  (reabrir)
 
@@ -128,12 +161,13 @@ cancelled → (estado final, no transiciones)
 |--------|-------------|
 | `not_requested` | Sin solicitud fiscal |
 | `fiscal_data_pending` | Solicitud iniciada, datos pendientes |
-| `fiscal_data_received` | Datos fiscales recibidos |
+| `fiscal_data_received` | Recibida |
 | `ready_to_invoice` | Lista para facturar |
-| `sent_to_accountant` | Enviada al contador |
+| `sent_to_accountant` | En revisión |
+| `corrected_by_patient` | Corregida por paciente |
 | `issued` | Factura emitida |
-| `rejected` | Solicitud rechazada |
-| `cancelled` | Cancelada |
+| `rejected` | Requiere corrección |
+| `cancelled` | Cancelada / No facturable |
 
 **Nota:** Las ventas y solicitudes comparten el enum `invoice_status`, pero representan cosas distintas. Una venta puede estar `not_requested` mientras su solicitud asociada (si existe) tiene su propio estado.
 
@@ -204,7 +238,7 @@ cancelled → (estado final, no transiciones)
 1. Login → Dashboard
 2. Ir a Solicitudes → Ver solicitudes de clínicas asignadas
 3. Revisar datos fiscales y constancia (signed URL)
-4. Marcar como lista para facturar / enviar al contador
+4. Marcar en revisión o lista para facturar según el avance real
 5. Capturar UUID cuando la factura sea emitida en sistema externo
 6. Exportar CSV para contabilidad
 
