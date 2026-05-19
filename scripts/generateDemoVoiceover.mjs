@@ -1,6 +1,34 @@
 import fs from 'fs';
 import path from 'path';
 
+// Helper to safely parse and load local env files without external dependencies
+function loadEnvFile(fileName) {
+	const envPath = path.join(process.cwd(), fileName);
+	if (fs.existsSync(envPath)) {
+		const content = fs.readFileSync(envPath, 'utf-8');
+		const lines = content.split(/\r?\n/);
+		for (const line of lines) {
+			const cleanLine = line.trim();
+			if (!cleanLine || cleanLine.startsWith('#')) continue;
+			const delimiterIdx = cleanLine.indexOf('=');
+			if (delimiterIdx > 0) {
+				const key = cleanLine.substring(0, delimiterIdx).trim();
+				let value = cleanLine.substring(delimiterIdx + 1).trim();
+				if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+					value = value.substring(1, value.length - 1);
+				}
+				if (!process.env[key]) {
+					process.env[key] = value;
+				}
+			}
+		}
+	}
+}
+
+// Load local configurations safely
+loadEnvFile('.env.local');
+loadEnvFile('.env');
+
 // Load variables from environment
 const key = process.env.AZURE_SPEECH_KEY;
 const region = process.env.AZURE_SPEECH_REGION;
