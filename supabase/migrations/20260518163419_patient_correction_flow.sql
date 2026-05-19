@@ -379,10 +379,10 @@ BEGIN
 
   IF v_sale_id IS NOT NULL THEN
     UPDATE public.sales
-    SET status = CASE
+    SET status = (CASE
       WHEN v_request_id IS NOT NULL THEN 'corrected_by_patient'
       ELSE 'fiscal_data_received'
-    END
+    END)::public.invoice_status
     WHERE id = v_sale_id;
   END IF;
 
