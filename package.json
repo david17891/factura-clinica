@@ -16,7 +16,8 @@
     "db:types": "supabase gen types typescript --local > types/supabase.ts",
     "seed:local-users": "node scripts/seedLocalUsers.mjs",
     "video:preview": "remotion preview remotion/index.ts",
-    "video:render": "remotion render remotion/index.ts FacturaClinicaDemo out/factura-clinica-demo.mp4"
+    "video:render": "remotion render remotion/index.ts FacturaClinicaDemo out/factura-clinica-demo.mp4",
+    "audio:tts": "node scripts/generateDemoVoiceover.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
