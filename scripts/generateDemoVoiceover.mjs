@@ -29,20 +29,14 @@ function loadEnvFile(fileName) {
 loadEnvFile('.env.local');
 loadEnvFile('.env');
 
+import { execSync } from 'child_process';
+
 // Load variables from environment
 const key = process.env.AZURE_SPEECH_KEY;
 const region = process.env.AZURE_SPEECH_REGION;
 const voice = process.env.AZURE_TTS_VOICE || 'es-MX-DaliaNeural';
 
 console.log('=== FiscoBot — Generador de Locución Azure Neural TTS ===');
-
-// Validation check to avoid process failure or exposing secrets
-if (!key || !region) {
-	console.error('⚠️  Error de Configuración:');
-	console.error('Faltan las variables de entorno AZURE_SPEECH_KEY o AZURE_SPEECH_REGION.');
-	console.error('Por favor, configúrelas localmente antes de ejecutar este script.');
-	process.exit(1);
-}
 
 const textBlocks = [
 	"¿Cuánto tiempo pierde su clínica persiguiendo a pacientes por WhatsApp para que manden su Constancia Fiscal? Las solicitudes se pierden en los chats, llegan borrosas, incompletas y generan horas de retrabajo inútil.",
@@ -70,6 +64,37 @@ async function generateVoiceover() {
 	try {
 		console.log(`Generando voz con: ${voice}...`);
 
+		// Ensure directory exists
+		const outputDir = path.join(process.cwd(), 'out', 'audio');
+		if (!fs.existsSync(outputDir)) {
+			fs.mkdirSync(outputDir, { recursive: true });
+		}
+		const outputPath = path.join(outputDir, 'factura-clinica-demo-voiceover.mp3');
+
+		// Fallback check to edge-tts if Azure key or region are missing
+		if (!key || !region) {
+			console.log('⚠️  Azure Speech credentials missing. Falling back to edge-tts...');
+			
+			// edge-tts text input: combine blocks with simple spaces and pauses (plain text is perfect!)
+			const plainText = textBlocks.join('   ');
+			
+			// Construct command (use es-MX-DaliaNeural by default)
+			const command = `python -m edge_tts --text "${plainText.replace(/"/g, '\\"')}" --voice ${voice} --write-media "${outputPath}"`;
+			console.log('Running:', command);
+			execSync(command, { stdio: 'inherit' });
+			
+			console.log('✅ Locución generada con éxito con edge-tts!');
+			console.log(`Guardado en: ${outputPath}`);
+
+			// Also copy to public/remotion-assets for Remotion server resolution
+			const publicDir = path.join(process.cwd(), 'public', 'remotion-assets');
+			if (fs.existsSync(publicDir)) {
+				fs.copyFileSync(outputPath, path.join(publicDir, 'factura-clinica-demo-voiceover.mp3'));
+				console.log('✅ Copiado a public/remotion-assets/ para la composición de Remotion.');
+			}
+			return;
+		}
+
 		const url = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
 		const response = await fetch(url, {
 			method: 'POST',
@@ -87,17 +112,10 @@ async function generateVoiceover() {
 			throw new Error(`Azure API respondió con status ${response.status}: ${errorText}`);
 		}
 
-		// Ensure directory exists
-		const outputDir = path.join(process.cwd(), 'out', 'audio');
-		if (!fs.existsSync(outputDir)) {
-			fs.mkdirSync(outputDir, { recursive: true });
-		}
-
-		const outputPath = path.join(outputDir, 'factura-clinica-demo-voiceover.mp3');
 		const buffer = await response.arrayBuffer();
 		fs.writeFileSync(outputPath, Buffer.from(buffer));
 
-		console.log('✅ Locución generada con éxito!');
+		console.log('✅ Locución generada con éxito con Azure Neural TTS!');
 		console.log(`Guardado en: ${outputPath}`);
 
 		// Also copy to public/remotion-assets for Remotion server resolution
@@ -108,7 +126,7 @@ async function generateVoiceover() {
 		}
 
 	} catch (error) {
-		console.error('❌ Error al sintetizar voz de Azure:', error.message);
+		console.error('❌ Error al sintetizar voz:', error.message);
 		process.exit(1);
 	}
 }
