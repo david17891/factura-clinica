@@ -149,12 +149,30 @@ Si no se sube archivo, llenar manualmente con datos ficticios:
   - Botón **"Ver"** que abre con signed URL temporal (60s)
   - Datos sugeridos detectados
 
-### 10. Cambiar estado
+### 10. Solicitar corrección (flujo alternativo)
 
+Si el contador detecta un error en los datos fiscales:
+
+- En el detalle de la solicitud, clic en **"Requiere corrección"**
+- Escribir motivo claro, ej: "El código postal fiscal no coincide con la constancia."
+- Clic en **"Confirmar"**
+- La solicitud pasa a estado **"Requiere corrección"**
+- Aparecen botones:
+  - **"Copiar mensaje para paciente"**: copia mensaje completo con enlace de corrección
+  - **"Abrir WhatsApp"**: abre `wa.me` con mensaje prellenado (envío manual, no automatizado)
+- El paciente recibe el enlace `/factura/dental-rio-colorado?correction=TOKEN`, ve sus datos precargados, corrige y reenvía.
+- La solicitud pasa a **"Corregida por paciente"**.
+- Contador la revisa y marca en revisión o lista para facturar.
+
+> **Nota:** WhatsApp es asistencia manual. No es API oficial ni envío automático. El usuario humano debe confirmar el envío.
+
+### 11. Cambiar estado (flujo normal)
+
+- **"Marcar en revisión"** → sent_to_accountant
 - **"Marcar lista"** → ready_to_invoice
 - Aparece campo para capturar UUID
 
-### 11. Capturar UUID ficticio
+### 12. Capturar UUID ficticio
 
 - Ingresar UUID ficticio: `B2C3D4E5-F6A7-8901-BCDE-F01234567890`
 - Clic **"Guardar UUID"**

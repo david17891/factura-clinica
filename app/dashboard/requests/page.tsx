@@ -351,15 +351,23 @@ export default function RequestsPage() {
     toast.success('Mensaje copiado')
   }
 
+  const normalizePhoneForWhatsApp = (rawPhone: string | null | undefined): string | null => {
+    if (!rawPhone) return null
+    const digits = rawPhone.replace(/\D/g, '')
+    if (digits.length === 0) return null
+    if (digits.length === 10) return `52${digits}`
+    return digits
+  }
+
   const openCorrectionWhatsApp = (request: RequestRow) => {
-    const phone = request.patient_phone?.replace(/\D/g, '')
+    const phone = normalizePhoneForWhatsApp(request.patient_phone)
     const message = getCorrectionMessage(request)
     if (!message.includes('/factura/')) {
       toast.error('No se pudo generar el enlace de corrección')
       return
     }
     const url = phone
-      ? `https://wa.me/52${phone}?text=${encodeURIComponent(message)}`
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
       : `https://wa.me/?text=${encodeURIComponent(message)}`
     window.open(url, '_blank', 'noopener,noreferrer')
   }
@@ -630,6 +638,11 @@ export default function RequestsPage() {
                                         <span className="break-words">Abrir WhatsApp</span>
                                       </Button>
                                     </div>
+                                    <p className="text-[11px] text-amber-700/80 leading-relaxed">
+                                      WhatsApp se abre en una nueva pestaña con el mensaje prellenado.
+                                      El usuario debe revisar y confirmar manualmente el envío.
+                                      No es envío automático ni API oficial de WhatsApp.
+                                    </p>
                                   </div>
                                 )}
 

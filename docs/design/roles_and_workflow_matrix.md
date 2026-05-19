@@ -109,7 +109,14 @@ Recepción puede ver solicitudes, estado, constancia y datos confirmados, pero n
 7. La solicitud pasa a `corrected_by_patient`.
 8. Admin o contador la revisa de nuevo, la marca en revisión o lista para facturar, y después captura UUID para dejarla `issued`.
 
-WhatsApp sigue siendo manual. No hay WhatsApp API, CFDI automático, PAC ni validación SAT.
+### WhatsApp Manual Assist
+
+- El sistema **no usa WhatsApp API oficial** ni automatiza envíos.
+- El flujo de corrección genera un mensaje prellenado y abre `wa.me` en una nueva pestaña del navegador.
+- El usuario humano (recepción, admin o contador) debe revisar el mensaje y confirmar manualmente el envío en WhatsApp Web o la app móvil.
+- No se guardan sesiones, cookies ni conversaciones de WhatsApp.
+- El número telefónico se normaliza antes de construir la URL: números de 10 dígitos se prefija con `52` (México); si ya incluye prefijo internacional se usa tal cual después de limpiar no-dígitos.
+- Si no hay teléfono registrado, se abre `wa.me/?text=` para que el usuario elija el destinatario manualmente.
 
 ### Estados de solicitud fiscal (`invoice_status`)
 
