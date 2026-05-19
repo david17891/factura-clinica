@@ -54,3 +54,6 @@ next-env.d.ts
 *.mp4
 *.webm
 *.mov
+*.wav
+*.mp3
+*.m4a
